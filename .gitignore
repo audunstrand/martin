@@ -1,0 +1,13 @@
+# Build outputs
+build/
+
+# Gradle
+.gradle/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+
+# Martin cache (generated in target projects)
+.martin/
