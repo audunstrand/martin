@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.TypeMigrationRefactoring
 
 class TypeMigrationCommand : CliktCommand(name = "type-migration") {
@@ -17,7 +18,10 @@ class TypeMigrationCommand : CliktCommand(name = "type-migration") {
     private val col by option("--col", "-c").int().required()
     private val newType by option("--new-type", "-t").required()
 
-    override fun run() = runRefactoring(projectDir, "type-migration") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "type-migration",
+        daemonRequest = DaemonRequest(command = "type-migration", file = file.toString(), line = line, col = col, newType = newType),
+    ) { analysis ->
         TypeMigrationRefactoring(analysis).migrate(file, line, col, newType)
     }
 }

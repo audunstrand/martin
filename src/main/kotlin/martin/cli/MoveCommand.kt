@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.path
 import martin.compiler.GradleProjectDiscovery
+import martin.daemon.DaemonRequest
 import martin.refactoring.MoveRefactoring
 
 class MoveCommand : CliktCommand(name = "move") {
@@ -15,7 +16,10 @@ class MoveCommand : CliktCommand(name = "move") {
     private val symbol by option("--symbol", "-s").required()
     private val toPackage by option("--to-package", "-t").required()
 
-    override fun run() = runRefactoring(projectDir, "move") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "move",
+        daemonRequest = DaemonRequest(command = "move", symbol = symbol, toPackage = toPackage),
+    ) { analysis ->
         val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
         MoveRefactoring(analysis).move(symbol, toPackage, sourceRoots)
     }

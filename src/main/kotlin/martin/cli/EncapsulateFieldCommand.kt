@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.EncapsulateFieldRefactoring
 
 class EncapsulateFieldCommand : CliktCommand(name = "encapsulate-field") {
@@ -16,7 +17,10 @@ class EncapsulateFieldCommand : CliktCommand(name = "encapsulate-field") {
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "encapsulate-field") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "encapsulate-field",
+        daemonRequest = DaemonRequest(command = "encapsulate-field", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         EncapsulateFieldRefactoring(analysis).encapsulate(file, line, col)
     }
 }

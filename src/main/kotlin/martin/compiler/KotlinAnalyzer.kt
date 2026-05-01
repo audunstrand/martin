@@ -34,26 +34,14 @@ class KotlinAnalyzer private constructor(
         }
     }
 
+    // Cached environment for daemon mode — reused across analyze() calls.
+    private var cachedEnvironment: KotlinCoreEnvironment? = null
+    private var cachedDisposable: org.jetbrains.kotlin.com.intellij.openapi.Disposable? = null
+
     fun analyze(): AnalysisResult {
-        val disposable = Disposer.newDisposable("martin-analysis")
+        val (environment, disposable, ownsEnvironment) = getOrCreateEnvironment()
 
         try {
-            val configuration = CompilerConfiguration().apply {
-                put(
-                    CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY,
-                    PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false)
-                )
-                put(CommonConfigurationKeys.MODULE_NAME, projectDir.fileName.toString())
-                put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.JVM_21)
-                addJvmClasspathRoots(classpathEntries)
-            }
-
-            val environment = KotlinCoreEnvironment.createForProduction(
-                disposable,
-                configuration,
-                EnvironmentConfigFiles.JVM_CONFIG_FILES
-            )
-
             val psiFactory = KtPsiFactory(environment.project)
             val ktFiles = sourceRoots.flatMap { root ->
                 root.toFile().walkTopDown()
@@ -73,10 +61,66 @@ class KotlinAnalyzer private constructor(
                 bindingContext = bindingContext,
                 environment = environment,
                 disposable = disposable,
+                ownsDisposable = ownsEnvironment,
             )
         } catch (e: Exception) {
-            Disposer.dispose(disposable)
+            if (ownsEnvironment) Disposer.dispose(disposable)
             throw e
         }
+    }
+
+    /**
+     * Enable environment caching for daemon mode.
+     * Creates the environment once and reuses it for subsequent analyze() calls.
+     * The caller is responsible for calling [disposeEnvironment] when done.
+     */
+    fun warmUp() {
+        if (cachedEnvironment != null) return
+        val disposable = Disposer.newDisposable("martin-daemon")
+        cachedEnvironment = createEnvironment(disposable)
+        cachedDisposable = disposable
+    }
+
+    /**
+     * Dispose the cached environment. Call when shutting down daemon mode.
+     */
+    fun disposeEnvironment() {
+        cachedDisposable?.let { Disposer.dispose(it) }
+        cachedEnvironment = null
+        cachedDisposable = null
+    }
+
+    private data class EnvironmentInfo(
+        val environment: KotlinCoreEnvironment,
+        val disposable: org.jetbrains.kotlin.com.intellij.openapi.Disposable,
+        val ownsEnvironment: Boolean,
+    )
+
+    private fun getOrCreateEnvironment(): EnvironmentInfo {
+        val cached = cachedEnvironment
+        val cachedDisp = cachedDisposable
+        if (cached != null && cachedDisp != null) {
+            return EnvironmentInfo(cached, cachedDisp, ownsEnvironment = false)
+        }
+        val disposable = Disposer.newDisposable("martin-analysis")
+        return EnvironmentInfo(createEnvironment(disposable), disposable, ownsEnvironment = true)
+    }
+
+    private fun createEnvironment(disposable: org.jetbrains.kotlin.com.intellij.openapi.Disposable): KotlinCoreEnvironment {
+        val configuration = CompilerConfiguration().apply {
+            put(
+                CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY,
+                PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false)
+            )
+            put(CommonConfigurationKeys.MODULE_NAME, projectDir.fileName.toString())
+            put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.JVM_21)
+            addJvmClasspathRoots(classpathEntries)
+        }
+
+        return KotlinCoreEnvironment.createForProduction(
+            disposable,
+            configuration,
+            EnvironmentConfigFiles.JVM_CONFIG_FILES
+        )
     }
 }

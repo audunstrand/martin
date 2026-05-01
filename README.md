@@ -85,6 +85,24 @@ martin inline -p . -f src/main/kotlin/App.kt -l 8 -c 9
 | `type-migration` | Change a type and update all related code |
 | `move-statements-into-function` | Move statements into an existing function |
 
+## Daemon Mode
+
+Each Martin invocation normally takes a few seconds due to Kotlin compiler startup and project analysis. The daemon keeps the compiler environment warm between invocations, reducing this to under 2 seconds.
+
+```bash
+# Start the daemon for a project (runs in the foreground)
+martin daemon start -p /path/to/project
+
+# In another terminal, commands automatically use the daemon
+martin rename -p /path/to/project -f src/main/kotlin/App.kt -l 5 -c 10 --new-name foo
+
+# Check status / stop
+martin daemon status -p /path/to/project
+martin daemon stop -p /path/to/project
+```
+
+The daemon writes its port to `.martin/daemon.port`. CLI commands check for this file and delegate to the daemon if it's running, falling back to direct mode otherwise.
+
 ## Classpath Caching
 
 Martin resolves your project's classpath via Gradle on first run and caches the result in `.martin/classpath.cache`. The cache auto-invalidates when `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, or `gradle/libs.versions.toml` change.

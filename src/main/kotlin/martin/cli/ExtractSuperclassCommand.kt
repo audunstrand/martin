@@ -8,6 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ExtractSuperclassRefactoring
 
 class ExtractSuperclassCommand : CliktCommand(name = "extract-superclass") {
@@ -19,7 +20,10 @@ class ExtractSuperclassCommand : CliktCommand(name = "extract-superclass") {
     private val superclassName by option("--superclass-name").required()
     private val members by option("--members").split(",").required()
 
-    override fun run() = runRefactoring(projectDir, "extract-superclass") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "extract-superclass",
+        daemonRequest = DaemonRequest(command = "extract-superclass", file = file.toString(), line = line, col = col, name = superclassName, members = members.joinToString(",")),
+    ) { analysis ->
         ExtractSuperclassRefactoring(analysis).extract(file, line, col, superclassName, members)
     }
 }

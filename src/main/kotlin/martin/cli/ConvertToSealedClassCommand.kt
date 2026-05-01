@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ConvertToSealedClassRefactoring
 
 class ConvertToSealedClassCommand : CliktCommand(name = "convert-to-sealed-class") {
@@ -16,7 +17,10 @@ class ConvertToSealedClassCommand : CliktCommand(name = "convert-to-sealed-class
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "convert-to-sealed-class") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "convert-to-sealed-class",
+        daemonRequest = DaemonRequest(command = "convert-to-sealed-class", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         ConvertToSealedClassRefactoring(analysis).convert(file, line, col)
     }
 }

@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ExtractFunctionRefactoring
 
 class ExtractFunctionCommand : CliktCommand(name = "extract-function") {
@@ -17,7 +18,10 @@ class ExtractFunctionCommand : CliktCommand(name = "extract-function") {
     private val endLine by option("--end-line", "-e").int().required()
     private val name by option("--name", "-n").required()
 
-    override fun run() = runRefactoring(projectDir, "extract-function") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "extract-function",
+        daemonRequest = DaemonRequest(command = "extract-function", file = file.toString(), startLine = startLine, endLine = endLine, name = name),
+    ) { analysis ->
         ExtractFunctionRefactoring(analysis).extract(file, startLine, endLine, name)
     }
 }

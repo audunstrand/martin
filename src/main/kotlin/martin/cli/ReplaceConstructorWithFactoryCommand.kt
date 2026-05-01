@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ReplaceConstructorWithFactoryRefactoring
 
 class ReplaceConstructorWithFactoryCommand : CliktCommand(name = "replace-constructor-with-factory") {
@@ -17,7 +18,10 @@ class ReplaceConstructorWithFactoryCommand : CliktCommand(name = "replace-constr
     private val col by option("--col", "-c").int().required()
     private val factoryName by option("--factory-name").default("create")
 
-    override fun run() = runRefactoring(projectDir, "replace-constructor-with-factory") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "replace-constructor-with-factory",
+        daemonRequest = DaemonRequest(command = "replace-constructor-with-factory", file = file.toString(), line = line, col = col, name = factoryName),
+    ) { analysis ->
         ReplaceConstructorWithFactoryRefactoring(analysis).replace(file, line, col, factoryName)
     }
 }

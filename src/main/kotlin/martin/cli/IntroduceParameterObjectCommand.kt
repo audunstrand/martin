@@ -8,6 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.IntroduceParameterObjectRefactoring
 
 class IntroduceParameterObjectCommand : CliktCommand(name = "introduce-parameter-object") {
@@ -19,7 +20,10 @@ class IntroduceParameterObjectCommand : CliktCommand(name = "introduce-parameter
     private val className by option("--class-name").required()
     private val paramNames by option("--params").split(",").required()
 
-    override fun run() = runRefactoring(projectDir, "introduce-parameter-object") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "introduce-parameter-object",
+        daemonRequest = DaemonRequest(command = "introduce-parameter-object", file = file.toString(), line = line, col = col, name = className, paramNames = paramNames.joinToString(",")),
+    ) { analysis ->
         IntroduceParameterObjectRefactoring(analysis).introduce(file, line, col, className, paramNames)
     }
 }

@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ChangeSignatureRefactoring
 import martin.refactoring.ChangeSignatureRefactoring.ParameterSpec
 
@@ -18,7 +19,10 @@ class ChangeSignatureCommand : CliktCommand(name = "change-signature") {
     private val col by option("--col", "-c").int().required()
     private val params by option("--params").required()
 
-    override fun run() = runRefactoring(projectDir, "change-signature") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "change-signature",
+        daemonRequest = DaemonRequest(command = "change-signature", file = file.toString(), line = line, col = col, params = params),
+    ) { analysis ->
         ChangeSignatureRefactoring(analysis).changeSignature(file, line, col, parseParameterSpecs(params))
     }
 }

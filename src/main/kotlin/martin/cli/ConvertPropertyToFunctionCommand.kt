@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ConvertPropertyToFunctionRefactoring
 
 class ConvertPropertyToFunctionCommand : CliktCommand(name = "convert-property-to-function") {
@@ -16,7 +17,10 @@ class ConvertPropertyToFunctionCommand : CliktCommand(name = "convert-property-t
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "convert-property-to-function") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "convert-property-to-function",
+        daemonRequest = DaemonRequest(command = "convert-property-to-function", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         ConvertPropertyToFunctionRefactoring(analysis).convert(file, line, col)
     }
 }

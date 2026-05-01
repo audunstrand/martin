@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ConvertToDataClassRefactoring
 
 class ConvertToDataClassCommand : CliktCommand(name = "convert-to-data-class") {
@@ -16,7 +17,10 @@ class ConvertToDataClassCommand : CliktCommand(name = "convert-to-data-class") {
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "convert-to-data-class") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "convert-to-data-class",
+        daemonRequest = DaemonRequest(command = "convert-to-data-class", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         ConvertToDataClassRefactoring(analysis).convert(file, line, col)
     }
 }

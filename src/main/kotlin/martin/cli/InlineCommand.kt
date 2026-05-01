@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.InlineRefactoring
 import martin.refactoring.InlineRefactoring.SourceLocation
 
@@ -17,7 +18,10 @@ class InlineCommand : CliktCommand(name = "inline") {
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "inline") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "inline",
+        daemonRequest = DaemonRequest(command = "inline", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         InlineRefactoring(analysis).inline(SourceLocation(file, line, col))
     }
 }

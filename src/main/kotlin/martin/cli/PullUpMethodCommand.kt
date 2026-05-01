@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.PullUpMethodRefactoring
 
 class PullUpMethodCommand : CliktCommand(name = "pull-up-method") {
@@ -16,7 +17,10 @@ class PullUpMethodCommand : CliktCommand(name = "pull-up-method") {
     private val line by option("--line", "-l").int().required()
     private val col by option("--col", "-c").int().required()
 
-    override fun run() = runRefactoring(projectDir, "pull-up-method") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "pull-up-method",
+        daemonRequest = DaemonRequest(command = "pull-up-method", file = file.toString(), line = line, col = col),
+    ) { analysis ->
         PullUpMethodRefactoring(analysis).pullUp(file, line, col)
     }
 }

@@ -48,6 +48,8 @@ fun main(args: Array<String>) {
             InitCommand(),
             // Easter egg
             FowlerCommand(),
+            // Daemon
+            DaemonCommand(),
         )
         .main(args)
 }

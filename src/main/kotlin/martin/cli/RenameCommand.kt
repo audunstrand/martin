@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.RenameRefactoring
 
 class RenameCommand : CliktCommand(name = "rename") {
@@ -17,7 +18,10 @@ class RenameCommand : CliktCommand(name = "rename") {
     private val col by option("--col", "-c").int().required()
     private val newName by option("--new-name", "-n").required()
 
-    override fun run() = runRefactoring(projectDir, "rename") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "rename",
+        daemonRequest = DaemonRequest(command = "rename", file = file.toString(), line = line, col = col, newName = newName),
+    ) { analysis ->
         RenameRefactoring(analysis).rename(file, line, col, newName)
     }
 }

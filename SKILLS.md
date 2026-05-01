@@ -19,6 +19,23 @@ Martin is distributed as a fat JAR. It requires Java 21+.
 alias martin="java -jar /path/to/martin-0.1.0.jar"
 ```
 
+## Performance: Daemon Mode
+
+For faster execution, start the daemon before running multiple refactorings. The daemon keeps the Kotlin compiler environment warm, reducing each operation from ~4s to ~1.5s.
+
+```bash
+# Start daemon (in background or separate terminal)
+martin daemon start -p PROJECT
+
+# All subsequent commands automatically use the daemon if running
+martin rename -p PROJECT -f FILE -l LINE -c COL --new-name newName
+
+# Stop when done
+martin daemon stop -p PROJECT
+```
+
+Commands automatically fall back to direct mode if no daemon is running.
+
 ## Commands
 
 All commands share these common parameters:

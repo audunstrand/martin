@@ -11,8 +11,11 @@ class AnalysisResult(
     val bindingContext: BindingContext,
     val environment: KotlinCoreEnvironment,
     private val disposable: Disposable,
+    private val ownsDisposable: Boolean = true,
 ) : AutoCloseable {
     override fun close() {
-        Disposer.dispose(disposable)
+        if (ownsDisposable) {
+            Disposer.dispose(disposable)
+        }
     }
 }

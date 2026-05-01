@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.parameters.options.default
 import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
+import martin.daemon.DaemonRequest
 import martin.refactoring.ExtractVariableRefactoring
 
 class ExtractVariableCommand : CliktCommand(name = "extract-variable") {
@@ -17,7 +18,10 @@ class ExtractVariableCommand : CliktCommand(name = "extract-variable") {
     private val col by option("--col", "-c").int().required()
     private val name by option("--name", "-n").required()
 
-    override fun run() = runRefactoring(projectDir, "extract-variable") { analysis ->
+    override fun run() = runRefactoring(
+        projectDir, "extract-variable",
+        daemonRequest = DaemonRequest(command = "extract-variable", file = file.toString(), line = line, col = col, name = name),
+    ) { analysis ->
         ExtractVariableRefactoring(analysis).extract(file, line, col, name)
     }
 }
