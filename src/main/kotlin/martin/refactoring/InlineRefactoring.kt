@@ -38,6 +38,13 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
         val initializer = requireNotNull(property.initializer) { "Cannot inline property without initializer: ${property.name}" }
         val initializerText = initializer.text
 
+        // Refuse to inline a var that is reassigned
+        if (property.isVar) {
+            require(!isReassigned(property)) {
+                "Cannot inline var '${property.name}': it is reassigned after initialization"
+            }
+        }
+
         val descriptor = requireNotNull(analysis.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, property]) { "Could not resolve property: ${property.name}" }
 
         val references = RefactoringUtils.findAllReferences(analysis, descriptor)
@@ -108,18 +115,120 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
         for (callExpr in references) {
             var replacement = bodyText
 
-            // Substitute parameters with arguments
+            // Build parameter name -> argument text mapping, handling named arguments
             val args = callExpr.valueArguments
-                for ((i, param) in params.withIndex()) {
-                    val paramName = param.name ?: continue
-                    val argText = if (i < args.size) {
-                        args[i].getArgumentExpression()?.text ?: paramName
-                    } else {
-                        // Use default value if available
-                        param.defaultValue?.text ?: paramName
-                    }
-                    replacement = replacement.replace(Regex("\\b${Regex.escape(paramName)}\\b"), argText)
+            val paramMap = mutableMapOf<String, String>()
+            for ((i, arg) in args.withIndex()) {
+                val argExpr = arg.getArgumentExpression()?.text ?: continue
+                val argName = arg.getArgumentName()?.asName?.asString()
+                if (argName != null) {
+                    // Named argument
+                    paramMap[argName] = argExpr
+                } else {
+                    // Positional argument
+                    val paramName = params.getOrNull(i)?.name ?: continue
+                    paramMap[paramName] = argExpr
                 }
+            }
+            // Fill in defaults for missing params
+            for (param in params) {
+                val name = param.name ?: continue
+                if (name !in paramMap) {
+                    paramMap[name] = param.defaultValue?.text ?: name
+                }
+            }
+
+            // Replace parameter references using PSI-aware approach:
+            // Process replacements from right to left to avoid offset issues
+            val bodyPsi = function.bodyExpression
+            if (bodyPsi != null && paramMap.isNotEmpty()) {
+                val bodyOffset = bodyPsi.textOffset
+                data class Replacement(val start: Int, val end: Int, val text: String)
+                val replacements = mutableListOf<Replacement>()
+
+                bodyPsi.accept(object : KtTreeVisitorVoid() {
+                    override fun visitReferenceExpression(expression: KtReferenceExpression) {
+                        super.visitReferenceExpression(expression)
+                        if (expression !is KtNameReferenceExpression) return
+                        // Skip references inside string template entries (handled separately)
+                        if (expression.parent is KtSimpleNameStringTemplateEntry) return
+                        val refName = expression.getReferencedName()
+                        val argText = paramMap[refName] ?: return
+                        // Check it actually resolves to a parameter
+                        val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, expression]
+                        if (target is org.jetbrains.kotlin.descriptors.ValueParameterDescriptor) {
+                            val relStart = expression.textOffset - bodyOffset
+                            val relEnd = relStart + expression.textLength
+                            replacements.add(Replacement(relStart, relEnd, argText))
+                        }
+                    }
+
+                    override fun visitSimpleNameStringTemplateEntry(entry: KtSimpleNameStringTemplateEntry) {
+                        super.visitSimpleNameStringTemplateEntry(entry)
+                        val refExpr = entry.expression as? KtNameReferenceExpression ?: return
+                        val refName = refExpr.getReferencedName()
+                        val argText = paramMap[refName] ?: return
+                        val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, refExpr]
+                        if (target is org.jetbrains.kotlin.descriptors.ValueParameterDescriptor) {
+                            val relStart = entry.textOffset - bodyOffset
+                            val relEnd = relStart + entry.textLength
+                            // For string template, wrap in ${} if the arg isn't a simple name
+                            val templateReplacement = if (argText.matches(Regex("\\w+"))) "\$$argText" else "\${$argText}"
+                            replacements.add(Replacement(relStart, relEnd, templateReplacement))
+                        }
+                    }
+                })
+
+                // Now apply replacements to bodyText from right to left
+                // But bodyText may differ from bodyPsi.text (e.g. single return extracted)
+                // Use simple regex fallback if PSI offsets don't align with bodyText
+                if (replacements.isNotEmpty()) {
+                    // Try to use the direct body text approach
+                    val fullBodyText = bodyPsi.text
+                    val sorted = replacements.sortedByDescending { it.start }
+                    var result = fullBodyText
+                    for (r in sorted) {
+                        if (r.start >= 0 && r.end <= result.length) {
+                            result = result.substring(0, r.start) + r.text + result.substring(r.end)
+                        }
+                    }
+                    // Now extract the same way bodyText was extracted
+                    replacement = if (isExpressionBody) {
+                        result
+                    } else {
+                        val block = bodyPsi as? KtBlockExpression
+                        val statements = block?.statements ?: emptyList()
+                        if (statements.size == 1) {
+                            val stmt = statements[0]
+                            val stmtRelStart = stmt.textOffset - bodyOffset
+                            val stmtRelEnd = stmtRelStart + stmt.textLength
+                            // Extract the corresponding portion from result
+                            if (stmt is KtReturnExpression) {
+                                val retExpr = stmt.returnedExpression
+                                if (retExpr != null) {
+                                    val retRelStart = retExpr.textOffset - bodyOffset
+                                    val retRelEnd = retRelStart + retExpr.textLength
+                                    if (retRelStart >= 0 && retRelEnd <= result.length) {
+                                        result.substring(retRelStart, retRelEnd)
+                                    } else replacement
+                                } else "Unit"
+                            } else {
+                                if (stmtRelStart >= 0 && stmtRelEnd <= result.length) {
+                                    result.substring(stmtRelStart, stmtRelEnd)
+                                } else replacement
+                            }
+                        } else {
+                            "run {\n${statements.joinToString("\n") { s ->
+                                val sStart = s.textOffset - bodyOffset
+                                val sEnd = sStart + s.textLength
+                                if (sStart >= 0 && sEnd <= result.length) {
+                                    "    ${result.substring(sStart, sEnd)}"
+                                } else "    ${s.text}"
+                            }}\n}"
+                        }
+                    }
+                }
+            }
 
             // Determine the full expression to replace (might be a dot-qualified expression)
             val replaceElement = callExpr.parent.let {
@@ -165,6 +274,28 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
             current = current.parent
         }
         return null
+    }
+
+    private fun isReassigned(property: KtProperty): Boolean {
+        val name = property.name ?: return false
+        val descriptor = analysis.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, property] ?: return false
+        val containingBlock = property.parent ?: return false
+        var found = false
+        containingBlock.accept(object : KtTreeVisitorVoid() {
+            override fun visitBinaryExpression(expression: KtBinaryExpression) {
+                super.visitBinaryExpression(expression)
+                if (found) return
+                val op = expression.operationToken.toString()
+                if (op == "EQ" || op == "PLUSEQ" || op == "MINUSEQ" || op == "MULTEQ" || op == "DIVEQ") {
+                    val left = expression.left as? KtNameReferenceExpression ?: return
+                    val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, left]
+                    if (target?.original == descriptor.original) {
+                        found = true
+                    }
+                }
+            }
+        })
+        return found
     }
 
 }

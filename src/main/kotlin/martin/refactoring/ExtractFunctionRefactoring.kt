@@ -31,25 +31,27 @@ class ExtractFunctionRefactoring(private val analysis: AnalysisResult) {
 
         val elementAtStart = ktFile.findElementAt(startOffset)
         val enclosingFunction = RefactoringUtils.findParent<KtNamedFunction>(elementAtStart)
+        val enclosingInitializer = if (enclosingFunction == null) RefactoringUtils.findParent<KtClassInitializer>(elementAtStart) else null
+        val enclosingDeclaration: KtDeclaration? = enclosingFunction ?: enclosingInitializer
 
         val extractionIndent = RefactoringUtils.indentationAt(text, startLine)
 
         // Compute the indent for the new function based on where it will be inserted,
         // not where the code was extracted from.
-        val insertOffset = if (enclosingFunction != null) {
-            enclosingFunction.textRange.endOffset
+        val insertOffset = if (enclosingDeclaration != null) {
+            enclosingDeclaration.textRange.endOffset
         } else {
             text.length
         }
-        val targetIndent = if (enclosingFunction != null) {
-            val funcLine = RefactoringUtils.offsetToLineCol(text, enclosingFunction.textOffset).first
+        val targetIndent = if (enclosingDeclaration != null) {
+            val funcLine = RefactoringUtils.offsetToLineCol(text, enclosingDeclaration.textOffset).first
             RefactoringUtils.indentationAt(text, funcLine)
         } else {
             ""
         }
 
         val (declaredBefore, declaredInSelection, usedInSelection, usedAfterSelection) =
-            categorizeVariables(enclosingFunction, startOffset, endOffset)
+            categorizeVariables(enclosingDeclaration, startOffset, endOffset)
 
         val params = declaredBefore.filter { it.key in usedInSelection }
         val paramList = params.entries.joinToString(", ") { (name, type) ->
@@ -63,7 +65,7 @@ class ExtractFunctionRefactoring(private val analysis: AnalysisResult) {
         val (returnType, finalBody) = determineReturnType(returnVars, declaredBefore, params, reindentedBody, targetIndent)
 
         val needsSuspend = containsSuspendCalls(ktFile, startOffset, endOffset)
-        val visibility = if (enclosingFunction != null) "private " else ""
+        val visibility = if (enclosingDeclaration != null) "private " else ""
         val suspendModifier = if (needsSuspend) "suspend " else ""
         val newFunction = "\n${targetIndent}${visibility}${suspendModifier}fun $functionName($paramList)$returnType {\n$finalBody\n${targetIndent}}\n"
 
@@ -85,7 +87,7 @@ class ExtractFunctionRefactoring(private val analysis: AnalysisResult) {
     )
 
     private fun categorizeVariables(
-        enclosingFunction: KtNamedFunction?,
+        enclosingDeclaration: KtDeclaration?,
         startOffset: Int,
         endOffset: Int,
     ): VariableCategories {
@@ -94,8 +96,8 @@ class ExtractFunctionRefactoring(private val analysis: AnalysisResult) {
         val usedInSelection = mutableSetOf<String>()
         val usedAfterSelection = mutableSetOf<String>()
 
-        if (enclosingFunction != null) {
-            enclosingFunction.accept(object : KtTreeVisitorVoid() {
+        if (enclosingDeclaration != null) {
+            enclosingDeclaration.accept(object : KtTreeVisitorVoid() {
                 override fun visitProperty(property: KtProperty) {
                     super.visitProperty(property)
                     val name = property.name ?: return

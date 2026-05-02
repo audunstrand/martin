@@ -4,7 +4,6 @@ import martin.refactoring.*
 import martin.rewriter.SourceRewriter
 import martin.refactoring.InlineRefactoring.SourceLocation
 import martin.compiler.GradleProjectDiscovery
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
@@ -22,7 +21,6 @@ class RenameEndToEndTest {
     @TempDir
     lateinit var tempDir: Path
 
-    @Disabled("Known bug: rename class doesn't rename constructor calls (only type references)")
     @Test
     fun `rename class updates type refs, constructor calls, and imports across files`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -210,7 +208,6 @@ class ExtractFunctionEndToEndTest {
             "Lambda param 'transformed' should not be a function parameter. Got:\n$result")
     }
 
-    @Disabled("Known bug: extract-function only looks for KtNamedFunction as enclosing scope, init blocks not supported")
     @Test
     fun `extract from init block`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -296,7 +293,6 @@ class ExtractFunctionEndToEndTest {
             "Extracted function should be at class member indent. Got:\n$result")
     }
 
-    @Disabled("Known bug: extract-function doesn't capture 'this' references for class member context")
     @Test
     fun `extract code that uses this in class member context`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -332,7 +328,6 @@ class ExtractVariableEndToEndTest {
     @TempDir
     lateinit var tempDir: Path
 
-    @Disabled("Known bug: findContainingStatement doesn't handle when branches (parent is KtWhenEntry, not KtBlockExpression)")
     @Test
     fun `extract expression inside when branch`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -438,7 +433,6 @@ class InlineEndToEndTest {
         assertCompiles(projectDir)
     }
 
-    @Disabled("Known bug: inline uses positional argument mapping, doesn't handle named arguments")
     @Test
     fun `inline function with named arguments at call site`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -466,7 +460,6 @@ class InlineEndToEndTest {
         assertCompiles(projectDir)
     }
 
-    @Disabled("Known bug: inline parameter substitution via regex corrupts string templates containing the parameter name")
     @Test
     fun `inline function with string template in body`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -491,7 +484,6 @@ class InlineEndToEndTest {
         assertCompiles(projectDir, "Inlined code with string template should compile")
     }
 
-    @Disabled("Known bug: inline doesn't check if variable is var with reassignment")
     @Test
     fun `inline var that is reassigned should refuse`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -522,7 +514,6 @@ class ChangeSignatureEndToEndTest {
     @TempDir
     lateinit var tempDir: Path
 
-    @Disabled("Known bug: change-signature maps arguments by position, not name")
     @Test
     fun `change signature with named arguments at call site`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -555,7 +546,6 @@ class ChangeSignatureEndToEndTest {
         assertCompiles(projectDir, "Reordered signature with named arguments should compile")
     }
 
-    @Disabled("Known bug: change-signature doesn't handle trailing lambda arguments")
     @Test
     fun `change signature preserves trailing lambda`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -591,7 +581,6 @@ class ChangeSignatureEndToEndTest {
         assertCompiles(projectDir)
     }
 
-    @Disabled("Known bug: change-signature fills default value at call sites instead of leaving them untouched")
     @Test
     fun `change signature adds parameter with default value, existing calls untouched`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -633,7 +622,6 @@ class SafeDeleteEndToEndTest {
     @TempDir
     lateinit var tempDir: Path
 
-    @Disabled("Known bug: safe-delete doesn't detect type references as usages")
     @Test
     fun `safe delete class used as type reference refuses`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -747,7 +735,6 @@ class MoveEndToEndTest {
         assertFalse("import pkg.a.compute" in mainResult, "Old import should be removed. Got:\n$mainResult")
     }
 
-    @Disabled("Known bug: move doesn't transfer imports needed by the moved declaration to the target file")
     @Test
     fun `move class with dependencies transfers required imports`() {
         val projectDir = createProject(tempDir, mapOf(
@@ -825,7 +812,6 @@ class ExtractConstantEndToEndTest {
             "Should have companion object or const val. Got:\n$result")
     }
 
-    @Disabled("Known bug: extract-constant doesn't validate that string templates with interpolation can't be const val")
     @Test
     fun `extract string with interpolation should refuse or handle correctly`() {
         val projectDir = createProject(tempDir, mapOf(

@@ -83,7 +83,7 @@ class ExtractVariableRefactoring(private val analysis: AnalysisResult) {
         var current: PsiElement? = element
         while (current != null) {
             val parent = current.parent
-            if (parent is KtBlockExpression || parent is KtFile) {
+            if (parent is KtBlockExpression || parent is KtFile || parent is KtWhenEntry) {
                 return current
             }
             current = parent

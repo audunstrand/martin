@@ -55,7 +55,11 @@ class ExtractConstantRefactoring(private val analysis: AnalysisResult) {
             when (current) {
                 is KtConstantExpression -> return current
                 is KtStringTemplateExpression -> {
-                    if (current.entries.all { it is KtLiteralStringTemplateEntry }) return current
+                    // Only allow string templates that are pure literals (no interpolation)
+                    require(current.entries.all { it is KtLiteralStringTemplateEntry }) {
+                        "Cannot extract string with interpolation as a constant (const val requires compile-time constant)"
+                    }
+                    return current
                 }
             }
             if (current is KtExpression && current !is KtConstantExpression && current !is KtStringTemplateExpression) {

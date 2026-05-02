@@ -57,9 +57,28 @@ class SafeDeleteRefactoring(private val analysis: AnalysisResult) {
                     if (RefactoringUtils.findParent<KtImportDirective>(expression) != null) return
 
                     val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, expression]
-                    if (target != null && target.original == descriptor.original) {
+                    if (target != null && RefactoringUtils.matchesDescriptor(target, descriptor)) {
                         val (line, _) = RefactoringUtils.offsetToLineCol(ktFile.text, expression.textOffset)
                         usages.add(UsageInfo(filePath, line, expression.text))
+                    }
+                }
+
+                override fun visitTypeReference(typeReference: KtTypeReference) {
+                    super.visitTypeReference(typeReference)
+                    // Check type references that may not show up in REFERENCE_TARGET
+                    val type = analysis.bindingContext[BindingContext.TYPE, typeReference]
+                    if (type != null) {
+                        val typeDescriptor = type.constructor.declarationDescriptor
+                        if (typeDescriptor != null && typeDescriptor.original == descriptor.original) {
+                            // Make sure this isn't inside an import
+                            if (RefactoringUtils.findParent<KtImportDirective>(typeReference) != null) return
+                            // Avoid double-counting if the reference expression already caught it
+                            val (line, _) = RefactoringUtils.offsetToLineCol(ktFile.text, typeReference.textOffset)
+                            val existing = usages.any { it.file == filePath && it.line == line }
+                            if (!existing) {
+                                usages.add(UsageInfo(filePath, line, typeReference.text))
+                            }
+                        }
                     }
                 }
             })

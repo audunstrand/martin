@@ -4,6 +4,7 @@ import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
@@ -62,7 +63,12 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             edits.add(TextEdit(targetFilePath, existingContent.length, 0, appendText))
         } else {
             // Create new file with package declaration
-            val newFileContent = "package $toPackage\n\n$declarationText\n"
+            // Collect imports needed by the moved declaration
+            val neededImports = collectNeededImports(declaration, sourceFile, toPackage)
+            val importsBlock = if (neededImports.isNotEmpty()) {
+                neededImports.joinToString("\n") { "import $it" } + "\n\n"
+            } else ""
+            val newFileContent = "package $toPackage\n\n$importsBlock$declarationText\n"
             targetFilePath.writeText(newFileContent)
         }
 
@@ -126,6 +132,52 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             }
         }
         return null
+    }
+
+    /**
+     * Collect FQNs of symbols referenced by the declaration that need to be imported
+     * in the target file (because they're from a different package than the target).
+     */
+    private fun collectNeededImports(
+        declaration: KtNamedDeclaration,
+        sourceFile: KtFile,
+        targetPackage: String,
+    ): List<String> {
+        val sourcePackage = sourceFile.packageFqName.asString()
+        val neededFqns = mutableSetOf<String>()
+
+        declaration.accept(object : KtTreeVisitorVoid() {
+            override fun visitReferenceExpression(expression: KtReferenceExpression) {
+                super.visitReferenceExpression(expression)
+                val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, expression]
+                if (target != null) {
+                    val fqn = target.fqNameSafe.asString()
+                    val pkg = target.fqNameSafe.parent().asString()
+                    // Need import if the referenced symbol is not in the target package,
+                    // not in kotlin.*, and not the declaration itself
+                    if (pkg != targetPackage && !pkg.startsWith("kotlin") && pkg.isNotEmpty() && fqn != "${sourcePackage}.${declaration.name}") {
+                        neededFqns.add(fqn)
+                    }
+                }
+            }
+
+            override fun visitTypeReference(typeReference: KtTypeReference) {
+                super.visitTypeReference(typeReference)
+                val type = analysis.bindingContext[BindingContext.TYPE, typeReference]
+                if (type != null) {
+                    val typeDescriptor = type.constructor.declarationDescriptor
+                    if (typeDescriptor != null) {
+                        val fqn = typeDescriptor.fqNameSafe.asString()
+                        val pkg = typeDescriptor.fqNameSafe.parent().asString()
+                        if (pkg != targetPackage && !pkg.startsWith("kotlin") && pkg.isNotEmpty()) {
+                            neededFqns.add(fqn)
+                        }
+                    }
+                }
+            }
+        })
+
+        return neededFqns.sorted()
     }
 
 }

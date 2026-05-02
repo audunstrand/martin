@@ -82,27 +82,52 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
             val argList = callExpr.valueArgumentList ?: continue
             val oldArgs = callExpr.valueArguments
 
-            val newArgTexts = Array(newParams.size) { "" }
-            for ((oldIdx, arg) in oldArgs.withIndex()) {
-                val newIdx = oldToNewMapping[oldIdx]
-                if (newIdx != null) {
-                    newArgTexts[newIdx] = arg.getArgumentExpression()?.text ?: ""
+            // Build old argument map: param name -> argument text
+            val oldArgByName = mutableMapOf<String, String>()
+            for ((i, arg) in oldArgs.withIndex()) {
+                val argExpr = arg.getArgumentExpression()?.text ?: continue
+                val argName = arg.getArgumentName()?.asName?.asString()
+                if (argName != null) {
+                    oldArgByName[argName] = argExpr
+                } else if (i < oldParamNames.size) {
+                    oldArgByName[oldParamNames[i]] = argExpr
                 }
-                // If old param is not in new list, it's removed (arg dropped)
             }
 
-            // Fill in defaults for new parameters that don't have a corresponding old arg
-            for ((newIdx, param) in newParams.withIndex()) {
-                if (newArgTexts[newIdx].isEmpty()) {
-                    // New parameter - use its default value or a placeholder
-                    newArgTexts[newIdx] = param.defaultValue ?: "TODO(\"provide ${param.name}\")"
+            // Handle trailing lambda (lambda outside parentheses)
+            val trailingLambda = callExpr.lambdaArguments.firstOrNull()
+            val lastOldParam = oldParamNames.lastOrNull()
+            if (trailingLambda != null && lastOldParam != null && lastOldParam !in oldArgByName) {
+                oldArgByName[lastOldParam] = trailingLambda.getLambdaExpression()?.text ?: trailingLambda.text
+            }
+
+            // Build new argument list
+            val newArgTexts = mutableListOf<String>()
+            for (param in newParams) {
+                val existingArg = oldArgByName[param.name]
+                if (existingArg != null) {
+                    newArgTexts.add(existingArg)
+                } else if (param.defaultValue != null) {
+                    // New parameter with default value — don't add argument, leave it to use the default
+                    continue
+                } else {
+                    newArgTexts.add("TODO(\"provide ${param.name}\")")
                 }
             }
 
             val newArgListText = newArgTexts.joinToString(", ")
-            val openParen = argList.textOffset + 1
-            val closeParen = argList.textRange.endOffset - 1
-            edits.add(TextEdit(callFilePath, openParen, closeParen - openParen, newArgListText))
+
+            // If there was a trailing lambda, we need to replace from open paren to end of trailing lambda
+            if (trailingLambda != null) {
+                val openParen = argList.textOffset + 1
+                val endOfTrailingLambda = trailingLambda.textRange.endOffset
+                // Replace everything from after '(' to end of trailing lambda, including the old ')'
+                edits.add(TextEdit(callFilePath, openParen, endOfTrailingLambda - openParen, "$newArgListText)"))
+            } else {
+                val openParen = argList.textOffset + 1
+                val closeParen = argList.textRange.endOffset - 1
+                edits.add(TextEdit(callFilePath, openParen, closeParen - openParen, newArgListText))
+            }
         }
 
         return with(RefactoringUtils) { edits.sortedForApplication() }

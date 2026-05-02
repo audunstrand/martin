@@ -4,6 +4,8 @@ import martin.compiler.AnalysisResult
 import martin.compiler.KotlinAnalyzer.Companion.ORIGINAL_FILE_KEY
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.psi.*
@@ -170,7 +172,7 @@ object RefactoringUtils {
                 override fun visitReferenceExpression(expression: KtReferenceExpression) {
                     super.visitReferenceExpression(expression)
                     val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, expression]
-                    if (target != null && target.original == descriptor.original) {
+                    if (target != null && matchesDescriptor(target, descriptor)) {
                         if (expression is KtNameReferenceExpression) {
                             results.add(expression)
                         }
@@ -179,6 +181,22 @@ object RefactoringUtils {
             })
         }
         return results
+    }
+
+    /**
+     * Check if a resolved target matches the given descriptor.
+     * Handles the case where the target is a constructor but we're looking for the class.
+     */
+    fun matchesDescriptor(target: DeclarationDescriptor, descriptor: DeclarationDescriptor): Boolean {
+        if (target.original == descriptor.original) return true
+        // Constructor calls resolve to ConstructorDescriptor; match against the containing class
+        if (target is ConstructorDescriptor && descriptor is ClassDescriptor) {
+            return target.constructedClass.original == descriptor.original
+        }
+        if (descriptor is ConstructorDescriptor && target is ClassDescriptor) {
+            return descriptor.constructedClass.original == target.original
+        }
+        return false
     }
 
     /**
