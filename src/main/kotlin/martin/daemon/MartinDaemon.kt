@@ -2,17 +2,11 @@ package martin.daemon
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import martin.compiler.GradleProjectDiscovery
 import martin.compiler.KotlinAnalyzer
 import martin.compiler.AnalysisResult
 import martin.metrics.MetricsStore
 import martin.metrics.RefactoringEvent
 import martin.refactoring.*
-import martin.refactoring.convert.*
-import martin.refactoring.core.*
-import martin.refactoring.core.InlineRefactoring.SourceLocation
-import martin.refactoring.extract.*
-import martin.refactoring.restructure.*
 import martin.rewriter.SourceRewriter
 import java.io.PrintWriter
 import java.net.ServerSocket
@@ -103,16 +97,19 @@ class MartinDaemon(private val projectDir: Path) {
             // Re-analyze to pick up file changes (fast with warm environment)
             val analysis = analyzer.analyze()
             try {
-                val edits = executeRefactoring(request, analysis)
+                val output = executeRefactoring(request, analysis)
+                output.writeNewFiles()
+                val edits = output.edits
                 val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
+                val totalFiles = filesModified + output.newFiles.size
                 val duration = System.currentTimeMillis() - start
 
-                recordMetrics(request.command, true, duration, filesModified, edits.size)
+                recordMetrics(request.command, true, duration, totalFiles, edits.size)
                 writer.println(json.encodeToString(DaemonResponse.serializer(), DaemonResponse(
                     success = true,
-                    message = "${request.command}: ${edits.size} edits across $filesModified files (${duration}ms)",
+                    message = "${request.command}: ${edits.size} edits across $totalFiles files (${duration}ms)",
                     edits = edits.size,
-                    filesModified = filesModified,
+                    filesModified = totalFiles,
                     durationMs = duration,
                 )))
             } catch (e: Exception) {
@@ -127,65 +124,21 @@ class MartinDaemon(private val projectDir: Path) {
         }
     }
 
-    private fun executeRefactoring(request: DaemonRequest, analysis: AnalysisResult): List<martin.rewriter.TextEdit> {
-        val file = request.file?.let { Path(it) }
-        return when (request.command) {
-            "rename" -> RenameRefactoring(analysis).rename(file!!, request.line!!, request.col!!, request.newName!!)
-            "extract-function" -> ExtractFunctionRefactoring(analysis).extract(file!!, request.startLine!!, request.endLine!!, request.name!!)
-            "extract-variable" -> ExtractVariableRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!)
-            "inline" -> InlineRefactoring(analysis).inline(SourceLocation(file!!, request.line!!, request.col!!))
-            "move" -> {
-                val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
-                val output = MoveRefactoring(analysis).move(request.symbol!!, request.toPackage!!, sourceRoots)
-                output.writeNewFiles()
-                output.edits
-            }
-            "change-signature" -> {
-                val params = request.params!!.split(",").map { param ->
-                    val parts = param.trim().split(":")
-                    val nameStr = parts[0].trim()
-                    val typeAndDefault = parts[1].trim()
-                    val typeStr = if (typeAndDefault.contains("=")) typeAndDefault.substringBefore("=").trim() else typeAndDefault
-                    val default = if (param.contains("=")) param.substringAfter("=").trim() else null
-                    ChangeSignatureRefactoring.ParameterSpec(nameStr, typeStr, default)
-                }
-                ChangeSignatureRefactoring(analysis).changeSignature(file!!, request.line!!, request.col!!, params)
-            }
-            "convert-to-expression-body" -> ConvertToExpressionBodyRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "convert-to-block-body" -> ConvertToBlockBodyRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "add-named-arguments" -> AddNamedArgumentsRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "extract-constant" -> ExtractConstantRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!)
-            "safe-delete" -> SafeDeleteRefactoring(analysis).delete(file!!, request.line!!, request.col!!)
-            "convert-property-to-function" -> ConvertPropertyToFunctionRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "extract-parameter" -> ExtractParameterRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!)
-            "introduce-parameter-object" -> {
-                val paramNames = request.paramNames?.split(",")?.map { it.trim() } ?: emptyList()
-                IntroduceParameterObjectRefactoring(analysis).introduce(file!!, request.line!!, request.col!!, request.name!!, paramNames)
-            }
-            "extract-interface" -> {
-                val methods = request.methods?.split(",")?.map { it.trim() } ?: emptyList()
-                val output = ExtractInterfaceRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, methods)
-                output.writeNewFiles()
-                output.edits
-            }
-            "extract-superclass" -> {
-                val members = request.members?.split(",")?.map { it.trim() } ?: emptyList()
-                val output = ExtractSuperclassRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, members)
-                output.writeNewFiles()
-                output.edits
-            }
-            "pull-up-method" -> PullUpMethodRefactoring(analysis).pullUp(file!!, request.line!!, request.col!!)
-            "replace-constructor-with-factory" -> ReplaceConstructorWithFactoryRefactoring(analysis).replace(file!!, request.line!!, request.col!!, request.name ?: "create")
-            "convert-to-data-class" -> ConvertToDataClassRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "convert-to-extension-function" -> ConvertToExtensionFunctionRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "convert-to-sealed-class" -> ConvertToSealedClassRefactoring(analysis).convert(file!!, request.line!!, request.col!!)
-            "encapsulate-field" -> EncapsulateFieldRefactoring(analysis).encapsulate(file!!, request.line!!, request.col!!)
-            "type-migration" -> TypeMigrationRefactoring(analysis).migrate(file!!, request.line!!, request.col!!, request.newType!!)
-            "move-statements-into-function" -> MoveStatementsIntoFunctionRefactoring(analysis).move(
-                file!!, request.functionLine!!, request.functionCol!!, request.startLine!!, request.endLine!!
-            )
-            else -> error("Unknown command: ${request.command}")
-        }
+    private fun executeRefactoring(request: DaemonRequest, analysis: AnalysisResult): RefactoringOutput {
+        val entry = RefactoringRegistry.find(request.command)
+            ?: error("Unknown command: ${request.command}")
+
+        val refactoring = entry.factory(analysis)
+        val file = request.file?.let { Path(it) } ?: projectDir
+        val ctx = RefactoringContext(
+            analysis = analysis,
+            file = file,
+            line = request.line ?: 0,
+            col = request.col ?: 0,
+            args = request.args,
+            projectDir = projectDir,
+        )
+        return refactoring.execute(ctx)
     }
 
     private fun recordMetrics(type: String, success: Boolean, durationMs: Long, filesModified: Int, editsCount: Int, error: String? = null) {
@@ -204,20 +157,7 @@ data class DaemonRequest(
     val file: String? = null,
     val line: Int? = null,
     val col: Int? = null,
-    val name: String? = null,
-    val newName: String? = null,
-    val startLine: Int? = null,
-    val endLine: Int? = null,
-    val symbol: String? = null,
-    val toPackage: String? = null,
-    val params: String? = null,
-    val newType: String? = null,
-    val targetFunction: String? = null,
-    val functionLine: Int? = null,
-    val functionCol: Int? = null,
-    val paramNames: String? = null,
-    val methods: String? = null,
-    val members: String? = null,
+    val args: Map<String, String> = emptyMap(),
 )
 
 @Serializable

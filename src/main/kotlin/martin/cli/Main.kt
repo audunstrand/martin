@@ -1,4 +1,4 @@
-package martin.cli
+xpackage martin.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
@@ -7,6 +7,7 @@ import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import martin.refactoring.RefactoringRegistry
 
 /**
  * Global configuration passed from the root Martin command to subcommands.
@@ -33,49 +34,24 @@ class Martin : CliktCommand() {
 }
 
 fun main(args: Array<String>) {
+    val refactoringCommands = RefactoringRegistry.entries.map { entry ->
+        RefactoringCommand(
+            factory = entry.factory,
+            refactoringName = entry.name,
+            refactoringDescription = entry.description,
+            paramDefs = entry.params,
+        )
+    }
+
     Martin()
         .subcommands(
-            // Phase 1: Core refactorings
-            RenameCommand(),
-            ExtractFunctionCommand(),
-            ExtractVariableCommand(),
-            InlineCommand(),
-            MoveCommand(),
-            ChangeSignatureCommand(),
-            // Batch 1: Expression/body conversions
-            ConvertToExpressionBodyCommand(),
-            ConvertToBlockBodyCommand(),
-            AddNamedArgumentsCommand(),
-            // Batch 2: Extraction and deletion
-            ExtractConstantCommand(),
-            SafeDeleteCommand(),
-            ConvertPropertyToFunctionCommand(),
-            // Batch 3: Parameter refactorings
-            ExtractParameterCommand(),
-            IntroduceParameterObjectCommand(),
-            // Batch 4: Class hierarchy
-            ExtractInterfaceCommand(),
-            ExtractSuperclassCommand(),
-            PullUpMethodCommand(),
-            ReplaceConstructorWithFactoryCommand(),
-            // Batch 5: Kotlin idioms
-            ConvertToDataClassCommand(),
-            ConvertToExtensionFunctionCommand(),
-            ConvertToSealedClassCommand(),
-            // Batch 6: Advanced
-            EncapsulateFieldCommand(),
-            TypeMigrationCommand(),
-            MoveStatementsIntoFunctionCommand(),
-            // Metrics
-            ReportCommand(),
-            // Setup
-            InitCommand(),
-            // Easter egg
-            FowlerCommand(),
-            // Daemon
-            DaemonCommand(),
-            // MCP server
-            McpCommand(),
+            refactoringCommands + listOf(
+                ReportCommand(),
+                InitCommand(),
+                FowlerCommand(),
+                DaemonCommand(),
+                McpCommand(),
+            )
         )
         .main(args)
 }

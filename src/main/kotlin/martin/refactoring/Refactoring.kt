@@ -77,6 +77,8 @@ data class RefactoringContext(
     val col: Int,
     /** Extra parameters keyed by [ParamDef.name]. */
     val args: Map<String, String> = emptyMap(),
+    /** Project root directory (used by refactorings that need source root discovery). */
+    val projectDir: Path = file.parent,
 ) {
     /** Convenience: get a required string arg. */
     fun string(key: String): String =

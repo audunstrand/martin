@@ -1,6 +1,7 @@
 package martin.refactoring.core
 
 import martin.compiler.AnalysisResult
+import martin.compiler.GradleProjectDiscovery
 import martin.refactoring.*
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
@@ -28,7 +29,7 @@ class MoveRefactoring(private val analysis: AnalysisResult) : Refactoring {
     override fun execute(ctx: RefactoringContext): RefactoringOutput {
         val sourceRoots = ctx.stringOrNull("sourceRoots")
             ?.split(",")?.map { Path.of(it.trim()) }
-            ?: listOf(ctx.file.parent)
+            ?: GradleProjectDiscovery(ctx.projectDir).discoverSourceRoots()
         return move(ctx.string("symbol"), ctx.string("toPackage"), sourceRoots)
     }
 

@@ -1,15 +1,14 @@
 package martin.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.core.requireObject
 import martin.compiler.AnalysisResult
 import martin.compiler.KotlinAnalyzer
 import martin.daemon.DaemonClient
 import martin.daemon.DaemonRequest
 import martin.metrics.MetricsStore
 import martin.metrics.RefactoringEvent
+import martin.refactoring.RefactoringOutput
 import martin.rewriter.SourceRewriter
-import martin.rewriter.TextEdit
 import kotlinx.serialization.json.Json
 import java.nio.file.Path
 
@@ -29,7 +28,7 @@ inline fun CliktCommand.runRefactoring(
     projectDir: Path,
     type: String,
     daemonRequest: DaemonRequest? = null,
-    refactor: (AnalysisResult) -> List<TextEdit>,
+    refactor: (AnalysisResult) -> RefactoringOutput,
 ) {
     val config = globalConfig
     val isJson = config.format == "json"
@@ -64,7 +63,8 @@ inline fun CliktCommand.runRefactoring(
     val analyzer = KotlinAnalyzer.create(projectDir)
     val analysis = analyzer.analyze()
     try {
-        val edits = refactor(analysis)
+        val output = refactor(analysis)
+        val edits = output.edits
         val duration = System.currentTimeMillis() - start
 
         if (isDryRun) {
@@ -96,9 +96,11 @@ inline fun CliktCommand.runRefactoring(
             }
             recordMetrics(projectDir, type, true, duration, 0, edits.size)
         } else {
-            // Normal mode: apply edits
+            // Normal mode: apply edits and write new files
+            output.writeNewFiles()
             val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
-            recordMetrics(projectDir, type, true, duration, filesModified, edits.size)
+            val totalFiles = filesModified + output.newFiles.size
+            recordMetrics(projectDir, type, true, duration, totalFiles, edits.size)
 
             if (isJson) {
                 val editInfos = edits.map { edit ->
@@ -113,12 +115,12 @@ inline fun CliktCommand.runRefactoring(
                     success = true,
                     command = type,
                     edits = editInfos,
-                    filesModified = filesModified,
+                    filesModified = totalFiles,
                     durationMs = duration,
                 )
                 echo(jsonPretty.encodeToString(RefactoringResult.serializer(), result))
             } else {
-                echo("$type: ${edits.size} edits across $filesModified files (${duration}ms)")
+                echo("$type: ${edits.size} edits across $totalFiles files (${duration}ms)")
             }
         }
     } catch (e: Exception) {
