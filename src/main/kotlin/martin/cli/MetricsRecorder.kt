@@ -1,6 +1,7 @@
 package martin.cli
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.requireObject
 import martin.compiler.AnalysisResult
 import martin.compiler.KotlinAnalyzer
 import martin.daemon.DaemonClient
@@ -9,14 +10,20 @@ import martin.metrics.MetricsStore
 import martin.metrics.RefactoringEvent
 import martin.rewriter.SourceRewriter
 import martin.rewriter.TextEdit
+import kotlinx.serialization.json.Json
 import java.nio.file.Path
 
+
+@PublishedApi
+internal val jsonPretty = Json { prettyPrint = true }
 
 /**
  * Runs the full analyze → refactor → rewrite → metrics pipeline.
  *
- * If a daemon is running for the project, delegates to it for faster execution.
- * Otherwise, performs analysis directly (cold path).
+ * Supports:
+ * - Daemon delegation for faster execution
+ * - --dry-run mode (compute edits without writing)
+ * - --format json mode (structured output)
  */
 inline fun CliktCommand.runRefactoring(
     projectDir: Path,
@@ -24,14 +31,29 @@ inline fun CliktCommand.runRefactoring(
     daemonRequest: DaemonRequest? = null,
     refactor: (AnalysisResult) -> List<TextEdit>,
 ) {
-    // Try daemon first if a request was provided
-    if (daemonRequest != null) {
+    val config = globalConfig
+    val isJson = config.format == "json"
+    val isDryRun = config.dryRun
+
+    // Try daemon first if a request was provided (and not in dry-run mode)
+    if (daemonRequest != null && !isDryRun) {
         val response = DaemonClient.send(projectDir, daemonRequest)
         if (response != null) {
-            if (response.success) {
-                echo(response.message)
+            if (isJson) {
+                val result = RefactoringResult(
+                    success = response.success,
+                    command = type,
+                    filesModified = response.filesModified,
+                    durationMs = response.durationMs,
+                    error = if (!response.success) response.message else null,
+                )
+                echo(jsonPretty.encodeToString(RefactoringResult.serializer(), result))
             } else {
-                echo("$type failed: ${response.message}")
+                if (response.success) {
+                    echo(response.message)
+                } else {
+                    echo("$type failed: ${response.message}")
+                }
             }
             return
         }
@@ -43,14 +65,77 @@ inline fun CliktCommand.runRefactoring(
     val analysis = analyzer.analyze()
     try {
         val edits = refactor(analysis)
-        val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
         val duration = System.currentTimeMillis() - start
-        recordMetrics(projectDir, type, true, duration, filesModified, edits.size)
-        echo("$type: ${edits.size} edits across $filesModified files (${duration}ms)")
+
+        if (isDryRun) {
+            // Dry-run: return edits without writing
+            if (isJson) {
+                val editInfos = edits.map { edit ->
+                    RefactoringResult.EditInfo(
+                        file = projectDir.relativize(edit.filePath).toString(),
+                        offset = edit.offset,
+                        length = edit.length,
+                        replacement = edit.replacement,
+                    )
+                }
+                val result = RefactoringResult(
+                    success = true,
+                    command = type,
+                    edits = editInfos,
+                    filesModified = edits.map { it.filePath }.distinct().size,
+                    durationMs = duration,
+                )
+                echo(jsonPretty.encodeToString(RefactoringResult.serializer(), result))
+            } else {
+                val fileCount = edits.map { it.filePath }.distinct().size
+                echo("$type (dry-run): ${edits.size} edits across $fileCount files (${duration}ms)")
+                for (edit in edits) {
+                    val relPath = projectDir.relativize(edit.filePath)
+                    echo("  $relPath @ offset ${edit.offset}: replace ${edit.length} chars")
+                }
+            }
+            recordMetrics(projectDir, type, true, duration, 0, edits.size)
+        } else {
+            // Normal mode: apply edits
+            val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
+            recordMetrics(projectDir, type, true, duration, filesModified, edits.size)
+
+            if (isJson) {
+                val editInfos = edits.map { edit ->
+                    RefactoringResult.EditInfo(
+                        file = projectDir.relativize(edit.filePath).toString(),
+                        offset = edit.offset,
+                        length = edit.length,
+                        replacement = edit.replacement,
+                    )
+                }
+                val result = RefactoringResult(
+                    success = true,
+                    command = type,
+                    edits = editInfos,
+                    filesModified = filesModified,
+                    durationMs = duration,
+                )
+                echo(jsonPretty.encodeToString(RefactoringResult.serializer(), result))
+            } else {
+                echo("$type: ${edits.size} edits across $filesModified files (${duration}ms)")
+            }
+        }
     } catch (e: Exception) {
         val duration = System.currentTimeMillis() - start
         recordMetrics(projectDir, type, false, duration, 0, 0, e.message)
-        throw e
+
+        if (isJson) {
+            val result = RefactoringResult(
+                success = false,
+                command = type,
+                durationMs = duration,
+                error = e.message,
+            )
+            echo(jsonPretty.encodeToString(RefactoringResult.serializer(), result))
+        } else {
+            throw e
+        }
     }
 }
 
