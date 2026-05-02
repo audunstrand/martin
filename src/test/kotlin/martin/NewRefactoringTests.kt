@@ -1,6 +1,10 @@
 package martin
 
 import martin.refactoring.*
+import martin.refactoring.convert.*
+import martin.refactoring.core.*
+import martin.refactoring.extract.*
+import martin.refactoring.restructure.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path

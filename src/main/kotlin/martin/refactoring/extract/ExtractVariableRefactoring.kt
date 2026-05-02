@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -13,7 +14,17 @@ import java.nio.file.Path
  * Finds the expression at the cursor, replaces it with the variable name,
  * and inserts a val declaration before the statement containing the expression.
  */
-class ExtractVariableRefactoring(private val analysis: AnalysisResult) {
+class ExtractVariableRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-variable"
+    override val description = "Extract the expression at the cursor into a named val. The expression is replaced with the variable name"
+    override val params = listOf(
+        ParamDef("name", ParamType.STRING, "Name for the new variable"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return RefactoringOutput.edits(extract(ctx.file, ctx.line, ctx.col, ctx.string("name")))
+    }
 
     fun extract(file: Path, line: Int, col: Int, variableName: String): List<TextEdit> {
         val (ktFile, rawElement) = RefactoringUtils.findElementAt(analysis, file, line, col)

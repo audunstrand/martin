@@ -6,7 +6,7 @@ import kotlinx.serialization.json.put
 import martin.cli.RefactoringResult
 import martin.mcp.McpToolRegistry
 import martin.mcp.MartinToolRegistrar
-import martin.refactoring.RenameRefactoring
+import martin.refactoring.core.RenameRefactoring
 import martin.rewriter.SourceRewriter
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir

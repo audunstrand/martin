@@ -1,18 +1,27 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
 import java.nio.file.Path
-import kotlin.io.path.createDirectories
-import kotlin.io.path.exists
-import kotlin.io.path.writeText
 
 /**
  * Extract interface: creates an interface from selected methods of a class.
  * Makes the class implement the new interface.
  */
-class ExtractInterfaceRefactoring(private val analysis: AnalysisResult) {
+class ExtractInterfaceRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-interface"
+    override val description = "Create an interface from selected methods of a class and make the class implement it"
+    override val params = listOf(
+        ParamDef("interfaceName", ParamType.STRING, "Name for the new interface"),
+        ParamDef("methods", ParamType.STRING_LIST, "Comma-separated list of method names to include"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return extract(ctx.file, ctx.line, ctx.col, ctx.string("interfaceName"), ctx.stringList("methods"))
+    }
 
     fun extract(
         file: Path,
@@ -20,7 +29,7 @@ class ExtractInterfaceRefactoring(private val analysis: AnalysisResult) {
         col: Int,
         interfaceName: String,
         methodNames: List<String>,
-    ): List<TextEdit> {
+    ): RefactoringOutput {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)
         val classDecl = requireNotNull(RefactoringUtils.findParent<KtClass>(element)) { "No class found at $file:$line:$col" }
 
@@ -44,8 +53,6 @@ class ExtractInterfaceRefactoring(private val analysis: AnalysisResult) {
         val interfaceContent = "${packageDecl}interface $interfaceName {\n    $interfaceMethods\n}\n"
 
         val interfaceFile = filePath.parent.resolve("$interfaceName.kt")
-        if (!interfaceFile.parent.exists()) interfaceFile.parent.createDirectories()
-        interfaceFile.writeText(interfaceContent)
 
         val superTypeList = classDecl.getSuperTypeList()
         if (superTypeList != null) {
@@ -64,6 +71,6 @@ class ExtractInterfaceRefactoring(private val analysis: AnalysisResult) {
             }
         }
 
-        return with(RefactoringUtils) { edits.sortedForApplication() }
+        return RefactoringOutput(edits = with(RefactoringUtils) { edits.sortedForApplication() }, newFiles = mapOf(interfaceFile to interfaceContent))
     }
 }

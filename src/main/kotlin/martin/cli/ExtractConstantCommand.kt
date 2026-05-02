@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ExtractConstantRefactoring
+import martin.refactoring.extract.ExtractConstantRefactoring
 
 class ExtractConstantCommand : CliktCommand(name = "extract-constant") {
 

@@ -1,6 +1,7 @@
-package martin.refactoring
+package martin.refactoring.core
 
 import martin.compiler.AnalysisResult
+import martin.refactoring.*
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -8,26 +9,30 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
-import kotlin.io.path.writeText
 
 /**
  * Move refactoring: moves a top-level declaration to a different package/file.
  *
- * - Moves the declaration text to the target file
- * - Updates the package declaration in the target file
- * - Adds imports in all files that reference the moved symbol
- * - Removes the declaration from the source file
+ * Returns edits for existing files and new file contents via [RefactoringOutput.newFiles].
  */
-class MoveRefactoring(private val analysis: AnalysisResult) {
+class MoveRefactoring(private val analysis: AnalysisResult) : Refactoring {
 
-    /**
-     * Move a top-level symbol to a target package.
-     *
-     * @param symbolFqn Fully qualified name of the symbol to move (e.g., "com.example.MyClass")
-     * @param toPackage Target package name (e.g., "com.other")
-     * @param sourceRoots Source roots to determine where to create the target file
-     */
-    fun move(symbolFqn: String, toPackage: String, sourceRoots: List<Path>): List<TextEdit> {
+    override val name = "move"
+    override val description = "Move a top-level declaration to a different package. Updates all imports across the project"
+    override val params = listOf(
+        ParamDef("symbol", ParamType.STRING, "Fully qualified name of the symbol to move (e.g. 'com.example.MyClass')"),
+        ParamDef("toPackage", ParamType.STRING, "Target package name (e.g. 'com.other')"),
+        ParamDef("sourceRoots", ParamType.STRING, "Comma-separated source root paths", required = false),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        val sourceRoots = ctx.stringOrNull("sourceRoots")
+            ?.split(",")?.map { Path.of(it.trim()) }
+            ?: listOf(ctx.file.parent)
+        return move(ctx.string("symbol"), ctx.string("toPackage"), sourceRoots)
+    }
+
+    fun move(symbolFqn: String, toPackage: String, sourceRoots: List<Path>): RefactoringOutput {
         val parts = symbolFqn.split(".")
         val symbolName = parts.last()
         val sourcePackage = parts.dropLast(1).joinToString(".")
@@ -40,18 +45,15 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
 
         val declarationText = declaration.text
 
-        // Determine the descriptor for finding references
         val descriptor = requireNotNull(analysis.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, declaration]) { "Could not resolve descriptor for: $symbolFqn" }
 
         val edits = mutableListOf<TextEdit>()
+        val newFiles = mutableMapOf<Path, String>()
 
         edits.add(RefactoringUtils.removeElementLines(declaration))
 
-        // Create or append to the target file
+        // Determine target file path
         val targetDir = sourceRoots.first().resolve(toPackage.replace(".", "/"))
-        if (!targetDir.exists()) {
-            targetDir.createDirectories()
-        }
         val targetFilePath = targetDir.resolve("$symbolName.kt")
 
         val newFqn = "$toPackage.$symbolName"
@@ -62,14 +64,13 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             val appendText = "\n\n$declarationText\n"
             edits.add(TextEdit(targetFilePath, existingContent.length, 0, appendText))
         } else {
-            // Create new file with package declaration
-            // Collect imports needed by the moved declaration
+            // Create new file content — returned via newFiles instead of writing directly
             val neededImports = collectNeededImports(declaration, sourceFile, toPackage)
             val importsBlock = if (neededImports.isNotEmpty()) {
                 neededImports.joinToString("\n") { "import $it" } + "\n\n"
             } else ""
             val newFileContent = "package $toPackage\n\n$importsBlock$declarationText\n"
-            targetFilePath.writeText(newFileContent)
+            newFiles[targetFilePath] = newFileContent
         }
 
         // Update imports in all referencing files
@@ -78,7 +79,6 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             .map { it.containingFile as KtFile }
             .distinctBy { RefactoringUtils.filePath(it) }
             .filter { ktFile ->
-                // Don't add import to the target file itself
                 val filePath = RefactoringUtils.filePath(ktFile)
                 filePath != targetFilePath
             }
@@ -87,7 +87,6 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             val filePath = RefactoringUtils.filePath(ktFile)
             val fileText = ktFile.text
 
-            // Check if there's already an import for the old FQN
             val oldImport = "import $symbolFqn"
             val newImport = "import $newFqn"
 
@@ -95,7 +94,6 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             if (oldImportIdx >= 0) {
                 edits.add(TextEdit(filePath, oldImportIdx, oldImport.length, newImport))
             } else {
-                // Need to add import - find the import section
                 val importList = ktFile.importList
                 if (importList != null && importList.imports.isNotEmpty()) {
                     val lastImport = importList.imports.last()
@@ -113,7 +111,10 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
             }
         }
 
-        return with(RefactoringUtils) { edits.sortedForApplication() }
+        return RefactoringOutput(
+            edits = with(RefactoringUtils) { edits.sortedForApplication() },
+            newFiles = newFiles,
+        )
     }
 
     private fun findDeclarationByFqn(fqn: String): KtNamedDeclaration? {
@@ -134,10 +135,6 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
         return null
     }
 
-    /**
-     * Collect FQNs of symbols referenced by the declaration that need to be imported
-     * in the target file (because they're from a different package than the target).
-     */
     private fun collectNeededImports(
         declaration: KtNamedDeclaration,
         sourceFile: KtFile,
@@ -153,8 +150,6 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
                 if (target != null) {
                     val fqn = target.fqNameSafe.asString()
                     val pkg = target.fqNameSafe.parent().asString()
-                    // Need import if the referenced symbol is not in the target package,
-                    // not in kotlin.*, and not the declaration itself
                     if (pkg != targetPackage && !pkg.startsWith("kotlin") && pkg.isNotEmpty() && fqn != "${sourcePackage}.${declaration.name}") {
                         neededFqns.add(fqn)
                     }
@@ -179,5 +174,4 @@ class MoveRefactoring(private val analysis: AnalysisResult) {
 
         return neededFqns.sorted()
     }
-
 }

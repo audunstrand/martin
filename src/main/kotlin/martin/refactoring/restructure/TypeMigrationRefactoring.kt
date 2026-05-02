@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -14,7 +15,14 @@ import java.nio.file.Path
  * Type migration: changes a variable/function return type and propagates the change
  * through data flow (return types, parameters, local variables that receive the value).
  */
-class TypeMigrationRefactoring(private val analysis: AnalysisResult) {
+class TypeMigrationRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "type-migration"
+    override val description = "Change a variable or function's type annotation and propagate the type change"
+    override val params = listOf(ParamDef("newType", ParamType.STRING, "The new type to migrate to"))
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(migrate(ctx.file, ctx.line, ctx.col, ctx.string("newType")))
 
     fun migrate(file: Path, line: Int, col: Int, newType: String): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -18,7 +19,19 @@ import java.nio.file.Path
  * - Variables written inside the selection and used after (become return value)
  * - The extracted function is inserted right after the enclosing function
  */
-class ExtractFunctionRefactoring(private val analysis: AnalysisResult) {
+class ExtractFunctionRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-function"
+    override val description = "Extract a range of lines into a new function. Parameters and return values are inferred automatically"
+    override val params = listOf(
+        ParamDef("startLine", ParamType.INT, "First line to extract (1-based)"),
+        ParamDef("endLine", ParamType.INT, "Last line to extract (1-based)"),
+        ParamDef("name", ParamType.STRING, "Name for the new function"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return RefactoringOutput.edits(extract(ctx.file, ctx.int("startLine"), ctx.int("endLine"), ctx.string("name")))
+    }
 
     fun extract(file: Path, startLine: Int, endLine: Int, functionName: String): List<TextEdit> {
         val (ktFile, _) = RefactoringUtils.findElementAt(analysis, file, startLine, 0)

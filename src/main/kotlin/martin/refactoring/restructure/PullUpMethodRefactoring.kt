@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
@@ -12,7 +13,14 @@ import java.nio.file.Path
  * Pull up method: moves a method from a class to its superclass.
  * Push down method: moves a method from a superclass to a subclass.
  */
-class PullUpMethodRefactoring(private val analysis: AnalysisResult) {
+class PullUpMethodRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "pull-up-method"
+    override val description = "Move a method from a subclass to its superclass"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(pullUp(ctx.file, ctx.line, ctx.col))
 
     fun pullUp(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

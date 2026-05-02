@@ -8,7 +8,11 @@ import martin.compiler.AnalysisResult
 import martin.metrics.MetricsStore
 import martin.metrics.RefactoringEvent
 import martin.refactoring.*
-import martin.refactoring.InlineRefactoring.SourceLocation
+import martin.refactoring.convert.*
+import martin.refactoring.core.*
+import martin.refactoring.core.InlineRefactoring.SourceLocation
+import martin.refactoring.extract.*
+import martin.refactoring.restructure.*
 import martin.rewriter.SourceRewriter
 import java.io.PrintWriter
 import java.net.ServerSocket
@@ -132,7 +136,9 @@ class MartinDaemon(private val projectDir: Path) {
             "inline" -> InlineRefactoring(analysis).inline(SourceLocation(file!!, request.line!!, request.col!!))
             "move" -> {
                 val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
-                MoveRefactoring(analysis).move(request.symbol!!, request.toPackage!!, sourceRoots)
+                val output = MoveRefactoring(analysis).move(request.symbol!!, request.toPackage!!, sourceRoots)
+                output.writeNewFiles()
+                output.edits
             }
             "change-signature" -> {
                 val params = request.params!!.split(",").map { param ->
@@ -158,11 +164,15 @@ class MartinDaemon(private val projectDir: Path) {
             }
             "extract-interface" -> {
                 val methods = request.methods?.split(",")?.map { it.trim() } ?: emptyList()
-                ExtractInterfaceRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, methods)
+                val output = ExtractInterfaceRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, methods)
+                output.writeNewFiles()
+                output.edits
             }
             "extract-superclass" -> {
                 val members = request.members?.split(",")?.map { it.trim() } ?: emptyList()
-                ExtractSuperclassRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, members)
+                val output = ExtractSuperclassRefactoring(analysis).extract(file!!, request.line!!, request.col!!, request.name!!, members)
+                output.writeNewFiles()
+                output.edits
             }
             "pull-up-method" -> PullUpMethodRefactoring(analysis).pullUp(file!!, request.line!!, request.col!!)
             "replace-constructor-with-factory" -> ReplaceConstructorWithFactoryRefactoring(analysis).replace(file!!, request.line!!, request.col!!, request.name ?: "create")

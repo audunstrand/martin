@@ -1,6 +1,7 @@
-package martin.refactoring
+package martin.refactoring.core
 
 import martin.compiler.AnalysisResult
+import martin.refactoring.*
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -16,9 +17,16 @@ import java.nio.file.Path
  * For variables: replaces all usages with the initializer expression, removes the declaration.
  * For functions: replaces all call sites with the function body.
  */
-class InlineRefactoring(private val analysis: AnalysisResult) {
+class InlineRefactoring(private val analysis: AnalysisResult) : Refactoring {
 
-data class SourceLocation(val file: Path, val line: Int, val col: Int)
+    override val name = "inline"
+    override val description = "Inline a variable or function at the cursor. Replaces all usages with the initializer/body and removes the declaration"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(inline(SourceLocation(ctx.file, ctx.line, ctx.col)))
+
+    data class SourceLocation(val file: Path, val line: Int, val col: Int)
 
     fun inline(sourceLocation: SourceLocation): List<TextEdit> {
         val (ktFile, rawElement) = RefactoringUtils.findElementAt(analysis, sourceLocation.file, sourceLocation.line, sourceLocation.col)
@@ -57,21 +65,15 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
             // Check if the reference is inside a string template entry (e.g. "$varName" or "${varName}")
             val stringTemplateEntry = ref.parent as? KtStringTemplateEntry
             if (stringTemplateEntry != null) {
-                // The reference is inside a string template - we need special handling
-                // Replace the template entry (e.g. $bodyIndent or ${bodyIndent}) with the value
-                // If the initializer is a string literal, splice its content directly into the string
                 if (initializer is KtStringTemplateExpression) {
-                    // String literal: extract the content between quotes and splice it in
                     val entries = initializer.entries
                     val innerText = entries.joinToString("") { it.text }
                     edits.add(TextEdit(filePath, stringTemplateEntry.textOffset, stringTemplateEntry.textLength, innerText))
                 } else {
-                    // Non-string initializer: wrap in ${} expression
                     val exprText = "\${${initializerText}}"
                     edits.add(TextEdit(filePath, stringTemplateEntry.textOffset, stringTemplateEntry.textLength, exprText))
                 }
             } else {
-                // Normal code context
                 val replacement = if (needsParentheses(initializer, ref)) "($initializerText)" else initializerText
                 edits.add(TextEdit(filePath, ref.textOffset, ref.textLength, replacement))
             }
@@ -87,12 +89,10 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
 
         val descriptor = requireNotNull(analysis.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, function]) { "Could not resolve function: ${function.name}" }
 
-        // Get the body text - handle block vs expression body
         val isExpressionBody = function.hasBody() && !function.hasBlockBody()
         val bodyText = if (isExpressionBody) {
             body.text
         } else {
-            // For block body, if it's a single return statement, use just the expression
             val block = body as? KtBlockExpression
             val statements = block?.statements ?: emptyList()
             if (statements.size == 1) {
@@ -103,7 +103,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                     stmt.text
                 }
             } else {
-                // Multi-statement body: wrap in run { }
                 "run {\n${statements.joinToString("\n") { "    ${it.text}" }}\n}"
             }
         }
@@ -115,22 +114,18 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
         for (callExpr in references) {
             var replacement = bodyText
 
-            // Build parameter name -> argument text mapping, handling named arguments
             val args = callExpr.valueArguments
             val paramMap = mutableMapOf<String, String>()
             for ((i, arg) in args.withIndex()) {
                 val argExpr = arg.getArgumentExpression()?.text ?: continue
                 val argName = arg.getArgumentName()?.asName?.asString()
                 if (argName != null) {
-                    // Named argument
                     paramMap[argName] = argExpr
                 } else {
-                    // Positional argument
                     val paramName = params.getOrNull(i)?.name ?: continue
                     paramMap[paramName] = argExpr
                 }
             }
-            // Fill in defaults for missing params
             for (param in params) {
                 val name = param.name ?: continue
                 if (name !in paramMap) {
@@ -138,8 +133,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                 }
             }
 
-            // Replace parameter references using PSI-aware approach:
-            // Process replacements from right to left to avoid offset issues
             val bodyPsi = function.bodyExpression
             if (bodyPsi != null && paramMap.isNotEmpty()) {
                 val bodyOffset = bodyPsi.textOffset
@@ -150,11 +143,9 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                     override fun visitReferenceExpression(expression: KtReferenceExpression) {
                         super.visitReferenceExpression(expression)
                         if (expression !is KtNameReferenceExpression) return
-                        // Skip references inside string template entries (handled separately)
                         if (expression.parent is KtSimpleNameStringTemplateEntry) return
                         val refName = expression.getReferencedName()
                         val argText = paramMap[refName] ?: return
-                        // Check it actually resolves to a parameter
                         val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, expression]
                         if (target is org.jetbrains.kotlin.descriptors.ValueParameterDescriptor) {
                             val relStart = expression.textOffset - bodyOffset
@@ -172,18 +163,13 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                         if (target is org.jetbrains.kotlin.descriptors.ValueParameterDescriptor) {
                             val relStart = entry.textOffset - bodyOffset
                             val relEnd = relStart + entry.textLength
-                            // For string template, wrap in ${} if the arg isn't a simple name
                             val templateReplacement = if (argText.matches(Regex("\\w+"))) "\$$argText" else "\${$argText}"
                             replacements.add(Replacement(relStart, relEnd, templateReplacement))
                         }
                     }
                 })
 
-                // Now apply replacements to bodyText from right to left
-                // But bodyText may differ from bodyPsi.text (e.g. single return extracted)
-                // Use simple regex fallback if PSI offsets don't align with bodyText
                 if (replacements.isNotEmpty()) {
-                    // Try to use the direct body text approach
                     val fullBodyText = bodyPsi.text
                     val sorted = replacements.sortedByDescending { it.start }
                     var result = fullBodyText
@@ -192,7 +178,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                             result = result.substring(0, r.start) + r.text + result.substring(r.end)
                         }
                     }
-                    // Now extract the same way bodyText was extracted
                     replacement = if (isExpressionBody) {
                         result
                     } else {
@@ -202,7 +187,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                             val stmt = statements[0]
                             val stmtRelStart = stmt.textOffset - bodyOffset
                             val stmtRelEnd = stmtRelStart + stmt.textLength
-                            // Extract the corresponding portion from result
                             if (stmt is KtReturnExpression) {
                                 val retExpr = stmt.returnedExpression
                                 if (retExpr != null) {
@@ -230,7 +214,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                 }
             }
 
-            // Determine the full expression to replace (might be a dot-qualified expression)
             val replaceElement = callExpr.parent.let {
                 if (it is KtDotQualifiedExpression && it.selectorExpression == callExpr) it else callExpr
             }
@@ -246,7 +229,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
     }
 
     private fun needsParentheses(initializer: KtExpression, usageSite: PsiElement): Boolean {
-        // Binary expressions used inside other binary expressions may need parens
         if (initializer is KtBinaryExpression) {
             val parent = usageSite.parent
             if (parent is KtBinaryExpression || parent is KtDotQualifiedExpression) {
@@ -263,7 +245,6 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
                 is KtProperty -> return current
                 is KtNamedFunction -> return current
                 is KtNameReferenceExpression -> {
-                    // Resolve to the declaration
                     val target = analysis.bindingContext[BindingContext.REFERENCE_TARGET, current]
                     if (target != null) {
                         val decl = DescriptorToSourceUtils.descriptorToDeclaration(target)
@@ -297,5 +278,4 @@ data class SourceLocation(val file: Path, val line: Int, val col: Int)
         })
         return found
     }
-
 }

@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -11,7 +12,17 @@ import java.nio.file.Path
  * Extract a literal expression into a named constant.
  * Places it as a top-level `const val` or inside a `companion object` if within a class.
  */
-class ExtractConstantRefactoring(private val analysis: AnalysisResult) {
+class ExtractConstantRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-constant"
+    override val description = "Extract a literal expression into a named constant (const val)"
+    override val params = listOf(
+        ParamDef("name", ParamType.STRING, "Name for the constant"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return RefactoringOutput.edits(extract(ctx.file, ctx.line, ctx.col, ctx.string("name")))
+    }
 
     fun extract(file: Path, line: Int, col: Int, constantName: String): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

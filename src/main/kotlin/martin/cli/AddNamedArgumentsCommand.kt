@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.AddNamedArgumentsRefactoring
+import martin.refactoring.convert.AddNamedArgumentsRefactoring
 
 class AddNamedArgumentsCommand : CliktCommand(name = "add-named-arguments") {
 

@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.convert
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
@@ -11,7 +12,14 @@ import java.nio.file.Path
  * `fun f(): T { return expr }` -> `fun f(): T = expr`
  * Also handles `fun f(): T { expr }` for Unit-returning functions.
  */
-class ConvertToExpressionBodyRefactoring(private val analysis: AnalysisResult) {
+class ConvertToExpressionBodyRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "convert-to-expression-body"
+    override val description = "Convert a block-body function with a single return into an expression body"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(convert(ctx.file, ctx.line, ctx.col))
 
     fun convert(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

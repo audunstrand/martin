@@ -8,8 +8,8 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ChangeSignatureRefactoring
-import martin.refactoring.ChangeSignatureRefactoring.ParameterSpec
+import martin.refactoring.core.ChangeSignatureRefactoring
+import martin.refactoring.core.ChangeSignatureRefactoring.ParameterSpec
 
 class ChangeSignatureCommand : CliktCommand(name = "change-signature") {
 

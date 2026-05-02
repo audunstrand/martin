@@ -1,18 +1,27 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
 import java.nio.file.Path
-import kotlin.io.path.createDirectories
-import kotlin.io.path.exists
-import kotlin.io.path.writeText
 
 /**
  * Extract superclass: creates an abstract superclass from selected members of a class.
  * Moves selected members up and makes the original class inherit from the new superclass.
  */
-class ExtractSuperclassRefactoring(private val analysis: AnalysisResult) {
+class ExtractSuperclassRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-superclass"
+    override val description = "Create an abstract superclass from selected members of a class"
+    override val params = listOf(
+        ParamDef("superclassName", ParamType.STRING, "Name for the superclass"),
+        ParamDef("members", ParamType.STRING_LIST, "Comma-separated list of member names"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return extract(ctx.file, ctx.line, ctx.col, ctx.string("superclassName"), ctx.stringList("members"))
+    }
 
     fun extract(
         file: Path,
@@ -20,7 +29,7 @@ class ExtractSuperclassRefactoring(private val analysis: AnalysisResult) {
         col: Int,
         superclassName: String,
         memberNames: List<String>,
-    ): List<TextEdit> {
+    ): RefactoringOutput {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)
         val classDecl = requireNotNull(RefactoringUtils.findParent<KtClass>(element)) { "No class found at $file:$line:$col" }
 
@@ -54,8 +63,6 @@ class ExtractSuperclassRefactoring(private val analysis: AnalysisResult) {
         val superclassContent = "${packageDecl}abstract class $superclassName {\n${memberTexts.joinToString("\n")}\n}\n"
 
         val superclassFile = filePath.parent.resolve("$superclassName.kt")
-        if (!superclassFile.parent.exists()) superclassFile.parent.createDirectories()
-        superclassFile.writeText(superclassContent)
 
         val superTypeList = classDecl.getSuperTypeList()
         if (superTypeList != null) {
@@ -78,6 +85,6 @@ class ExtractSuperclassRefactoring(private val analysis: AnalysisResult) {
             }
         }
 
-        return with(RefactoringUtils) { edits.sortedForApplication() }
+        return RefactoringOutput(edits = with(RefactoringUtils) { edits.sortedForApplication() }, newFiles = mapOf(superclassFile to superclassContent))
     }
 }

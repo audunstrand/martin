@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -11,7 +12,17 @@ import java.nio.file.Path
  * Introduce parameter object: groups consecutive parameters of a function into a data class.
  * Updates the function declaration, body, and all call sites.
  */
-class IntroduceParameterObjectRefactoring(private val analysis: AnalysisResult) {
+class IntroduceParameterObjectRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "introduce-parameter-object"
+    override val description = "Group selected function parameters into a new data class. Updates function signature, body, and call sites"
+    override val params = listOf(
+        ParamDef("className", ParamType.STRING, "Name for the parameter object class"),
+        ParamDef("paramNames", ParamType.STRING_LIST, "Comma-separated list of parameter names to group"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(introduce(ctx.file, ctx.line, ctx.col, ctx.string("className"), ctx.stringList("paramNames")))
 
     fun introduce(
         file: Path,

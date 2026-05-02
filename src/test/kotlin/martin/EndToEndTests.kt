@@ -1,8 +1,12 @@
 package martin
 
 import martin.refactoring.*
+import martin.refactoring.convert.*
+import martin.refactoring.core.*
+import martin.refactoring.core.InlineRefactoring.SourceLocation
+import martin.refactoring.extract.*
+import martin.refactoring.restructure.*
 import martin.rewriter.SourceRewriter
-import martin.refactoring.InlineRefactoring.SourceLocation
 import martin.compiler.GradleProjectDiscovery
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -725,9 +729,9 @@ class MoveEndToEndTest {
 
         val analysis = analyzeProject(projectDir)
         val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
-        val edits = MoveRefactoring(analysis).move("pkg.a.compute", "pkg.c", sourceRoots)
-
-        SourceRewriter.applyEdits(edits)
+        val output = MoveRefactoring(analysis).move("pkg.a.compute", "pkg.c", sourceRoots)
+        output.writeNewFiles()
+        SourceRewriter.applyEdits(output.edits)
 
         val mainResult = projectDir.resolve("src/main/kotlin/pkg/b/Main.kt").readText()
 
@@ -765,9 +769,9 @@ class MoveEndToEndTest {
 
         val analysis = analyzeProject(projectDir)
         val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
-        val edits = MoveRefactoring(analysis).move("pkg.a.Processor", "pkg.c", sourceRoots)
-
-        SourceRewriter.applyEdits(edits)
+        val output = MoveRefactoring(analysis).move("pkg.a.Processor", "pkg.c", sourceRoots)
+        output.writeNewFiles()
+        SourceRewriter.applyEdits(output.edits)
 
         // The moved Processor class needs to import Config from pkg.a
         val movedFile = projectDir.resolve("src/main/kotlin/pkg/c/Processor.kt")

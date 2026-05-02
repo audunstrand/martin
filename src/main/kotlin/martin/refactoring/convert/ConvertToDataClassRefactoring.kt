@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.convert
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.psi.*
@@ -9,7 +10,14 @@ import java.nio.file.Path
  * Convert a regular class to a data class.
  * Adds the `data` modifier if the class has a primary constructor with val/var parameters.
  */
-class ConvertToDataClassRefactoring(private val analysis: AnalysisResult) {
+class ConvertToDataClassRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "convert-to-data-class"
+    override val description = "Add the data modifier to a class. Ensures all constructor parameters have val/var"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(convert(ctx.file, ctx.line, ctx.col))
 
     fun convert(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

@@ -1,6 +1,7 @@
-package martin.refactoring
+package martin.refactoring.core
 
 import martin.compiler.AnalysisResult
+import martin.refactoring.*
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
@@ -12,7 +13,16 @@ import java.nio.file.Path
 /**
  * Rename refactoring: finds a symbol at a given location and renames all references to it.
  */
-class RenameRefactoring(private val analysis: AnalysisResult) {
+class RenameRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "rename"
+    override val description = "Rename a symbol (function, class, variable, parameter) and update all references across the project"
+    override val params = listOf(
+        ParamDef("newName", ParamType.STRING, "The new name for the symbol"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(rename(ctx.file, ctx.line, ctx.col, ctx.string("newName")))
 
     fun rename(file: Path, line: Int, col: Int, newName: String): List<TextEdit> {
         val (targetFile, rawElement) = RefactoringUtils.findElementAt(analysis, file, line, col)
@@ -36,7 +46,6 @@ class RenameRefactoring(private val analysis: AnalysisResult) {
         }
 
         // Find and update import directives by FQN matching
-        // The binding context often doesn't resolve imports in files parsed via KtPsiFactory
         val oldFqn = descriptor.fqNameSafe.asString()
         val oldName = descriptor.name.asString()
         val newFqn = oldFqn.removeSuffix(oldName) + newName
@@ -85,5 +94,4 @@ class RenameRefactoring(private val analysis: AnalysisResult) {
             else -> null
         }
     }
-
 }

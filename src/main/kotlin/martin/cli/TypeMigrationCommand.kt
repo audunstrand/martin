@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.TypeMigrationRefactoring
+import martin.refactoring.restructure.TypeMigrationRefactoring
 
 class TypeMigrationCommand : CliktCommand(name = "type-migration") {
 

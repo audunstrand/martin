@@ -1,6 +1,7 @@
-package martin.refactoring
+package martin.refactoring.core
 
 import martin.compiler.AnalysisResult
+import martin.refactoring.*
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.psi.*
@@ -10,15 +11,21 @@ import java.nio.file.Path
 /**
  * Change signature refactoring: modify a function's parameters.
  *
- * Supports:
- * - Adding new parameters (with default values)
- * - Removing parameters
- * - Reordering parameters
- * - Renaming parameters
- *
+ * Supports adding, removing, reordering, and renaming parameters.
  * Updates the function declaration and all call sites.
  */
-class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
+class ChangeSignatureRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "change-signature"
+    override val description = "Change a function's parameter list. Supports adding, removing, reordering, and renaming parameters. Updates all call sites"
+    override val params = listOf(
+        ParamDef("params", ParamType.STRING, "New parameter list as comma-separated 'name:Type' or 'name:Type=default' entries"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        val params = parseParameterSpecs(ctx.string("params"))
+        return RefactoringOutput.edits(changeSignature(ctx.file, ctx.line, ctx.col, params))
+    }
 
     data class ParameterSpec(
         val name: String,
@@ -26,12 +33,6 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
         val defaultValue: String? = null,
     )
 
-    /**
-     * Change the signature of a function at the given location.
-     *
-     * @param newParams The new parameter list. Parameters matching existing ones by name
-     *        are kept (possibly reordered/renamed). New names are added. Missing old names are removed.
-     */
     fun changeSignature(
         file: Path,
         line: Int,
@@ -58,14 +59,12 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
         val paramListElement = function.valueParameterList
         if (paramListElement != null) {
             val filePath = RefactoringUtils.filePath(ktFile)
-            val openParen = paramListElement.textOffset + 1 // skip '('
-            val closeParen = paramListElement.textRange.endOffset - 1 // before ')'
+            val openParen = paramListElement.textOffset + 1
+            val closeParen = paramListElement.textRange.endOffset - 1
             edits.add(TextEdit(filePath, openParen, closeParen - openParen, newParamListText))
         }
 
-        // Build mapping from old param index to new param position
-        // For call site updates, we need to know how to rearrange arguments
-        val oldToNewMapping = mutableMapOf<Int, Int>() // oldIndex -> newIndex
+        val oldToNewMapping = mutableMapOf<Int, Int>()
         for ((newIdx, newParam) in newParams.withIndex()) {
             val oldIdx = oldParamNames.indexOf(newParam.name)
             if (oldIdx >= 0) {
@@ -82,7 +81,6 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
             val argList = callExpr.valueArgumentList ?: continue
             val oldArgs = callExpr.valueArguments
 
-            // Build old argument map: param name -> argument text
             val oldArgByName = mutableMapOf<String, String>()
             for ((i, arg) in oldArgs.withIndex()) {
                 val argExpr = arg.getArgumentExpression()?.text ?: continue
@@ -94,21 +92,18 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
                 }
             }
 
-            // Handle trailing lambda (lambda outside parentheses)
             val trailingLambda = callExpr.lambdaArguments.firstOrNull()
             val lastOldParam = oldParamNames.lastOrNull()
             if (trailingLambda != null && lastOldParam != null && lastOldParam !in oldArgByName) {
                 oldArgByName[lastOldParam] = trailingLambda.getLambdaExpression()?.text ?: trailingLambda.text
             }
 
-            // Build new argument list
             val newArgTexts = mutableListOf<String>()
             for (param in newParams) {
                 val existingArg = oldArgByName[param.name]
                 if (existingArg != null) {
                     newArgTexts.add(existingArg)
                 } else if (param.defaultValue != null) {
-                    // New parameter with default value — don't add argument, leave it to use the default
                     continue
                 } else {
                     newArgTexts.add("TODO(\"provide ${param.name}\")")
@@ -117,11 +112,9 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
 
             val newArgListText = newArgTexts.joinToString(", ")
 
-            // If there was a trailing lambda, we need to replace from open paren to end of trailing lambda
             if (trailingLambda != null) {
                 val openParen = argList.textOffset + 1
                 val endOfTrailingLambda = trailingLambda.textRange.endOffset
-                // Replace everything from after '(' to end of trailing lambda, including the old ')'
                 edits.add(TextEdit(callFilePath, openParen, endOfTrailingLambda - openParen, "$newArgListText)"))
             } else {
                 val openParen = argList.textOffset + 1
@@ -132,5 +125,24 @@ class ChangeSignatureRefactoring(private val analysis: AnalysisResult) {
 
         return with(RefactoringUtils) { edits.sortedForApplication() }
     }
+}
 
+/** Parse a parameter spec string like "name:Type, other:Int=42" into ParameterSpec list. */
+fun parseParameterSpecs(input: String): List<ChangeSignatureRefactoring.ParameterSpec> {
+    return input.split(",").map { part ->
+        val trimmed = part.trim()
+        val (nameType, default) = if ("=" in trimmed) {
+            val eqIdx = trimmed.indexOf("=")
+            trimmed.substring(0, eqIdx).trim() to trimmed.substring(eqIdx + 1).trim()
+        } else {
+            trimmed to null
+        }
+        val colonIdx = nameType.indexOf(":")
+        require(colonIdx > 0) { "Invalid parameter spec: '$trimmed'. Expected 'name:Type'" }
+        ChangeSignatureRefactoring.ParameterSpec(
+            name = nameType.substring(0, colonIdx).trim(),
+            type = nameType.substring(colonIdx + 1).trim(),
+            defaultValue = default,
+        )
+    }
 }

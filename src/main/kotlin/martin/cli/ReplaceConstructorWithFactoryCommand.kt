@@ -8,7 +8,7 @@ import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ReplaceConstructorWithFactoryRefactoring
+import martin.refactoring.restructure.ReplaceConstructorWithFactoryRefactoring
 
 class ReplaceConstructorWithFactoryCommand : CliktCommand(name = "replace-constructor-with-factory") {
 

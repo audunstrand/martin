@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ConvertToExtensionFunctionRefactoring
+import martin.refactoring.convert.ConvertToExtensionFunctionRefactoring
 
 class ConvertToExtensionFunctionCommand : CliktCommand(name = "convert-to-extension-function") {
 

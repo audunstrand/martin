@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.MoveStatementsIntoFunctionRefactoring
+import martin.refactoring.restructure.MoveStatementsIntoFunctionRefactoring
 
 class MoveStatementsIntoFunctionCommand : CliktCommand(name = "move-statements-into-function") {
 

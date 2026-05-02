@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.convert
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -13,7 +14,14 @@ import java.nio.file.Path
  * `fun process(list: List<Int>, x: Int)` -> `fun List<Int>.process(x: Int)`
  * Updates all call sites: `process(myList, 5)` -> `myList.process(5)`
  */
-class ConvertToExtensionFunctionRefactoring(private val analysis: AnalysisResult) {
+class ConvertToExtensionFunctionRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "convert-to-extension-function"
+    override val description = "Convert a function's first parameter into a receiver type, making it an extension function"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(convert(ctx.file, ctx.line, ctx.col))
 
     fun convert(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

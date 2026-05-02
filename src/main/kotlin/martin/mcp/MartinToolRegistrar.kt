@@ -5,7 +5,11 @@ import martin.compiler.AnalysisResult
 import martin.compiler.GradleProjectDiscovery
 import martin.compiler.KotlinAnalyzer
 import martin.refactoring.*
-import martin.refactoring.InlineRefactoring.SourceLocation
+import martin.refactoring.convert.*
+import martin.refactoring.core.*
+import martin.refactoring.core.InlineRefactoring.SourceLocation
+import martin.refactoring.extract.*
+import martin.refactoring.restructure.*
 import martin.rewriter.SourceRewriter
 import martin.rewriter.TextEdit
 import java.nio.file.Path
@@ -62,6 +66,22 @@ class MartinToolRegistrar(
             val edits = block(analysis)
             val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
             "${edits.size} edits across $filesModified files"
+        } finally {
+            analysis.close()
+        }
+    }
+
+    // Helper for refactorings that return RefactoringOutput (may create new files)
+    private inline fun withAnalysisOutput(block: (AnalysisResult) -> martin.refactoring.RefactoringOutput): String {
+        val analyzer = KotlinAnalyzer.create(projectDir)
+        val analysis = analyzer.analyze()
+        return try {
+            val output = block(analysis)
+            output.writeNewFiles()
+            val edits = output.edits
+            val filesModified = if (edits.isNotEmpty()) SourceRewriter.applyEdits(edits) else 0
+            val totalFiles = filesModified + output.newFiles.size
+            "${edits.size} edits across $totalFiles files"
         } finally {
             analysis.close()
         }
@@ -177,7 +197,7 @@ class MartinToolRegistrar(
             "toPackage" to stringProp("Target package name (e.g. 'com.other')"),
         ),
     ) { args ->
-        withAnalysis { analysis ->
+        withAnalysisOutput { analysis ->
             val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
             MoveRefactoring(analysis).move(args.str("symbol"), args.str("toPackage"), sourceRoots)
         }
@@ -298,7 +318,7 @@ class MartinToolRegistrar(
         ),
     ) { args ->
         val methods = args.str("methods").split(",").map { it.trim() }
-        withAnalysis { analysis ->
+        withAnalysisOutput { analysis ->
             ExtractInterfaceRefactoring(analysis).extract(filePath(args), args.int("line"), args.int("col"), args.str("interfaceName"), methods)
         }
     }
@@ -313,7 +333,7 @@ class MartinToolRegistrar(
         ),
     ) { args ->
         val members = args.str("members").split(",").map { it.trim() }
-        withAnalysis { analysis ->
+        withAnalysisOutput { analysis ->
             ExtractSuperclassRefactoring(analysis).extract(filePath(args), args.int("line"), args.int("col"), args.str("superclassName"), members)
         }
     }

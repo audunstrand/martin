@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
@@ -15,7 +16,14 @@ import java.nio.file.Path
  * `fun setName(value: String) { _name = value }`
  * Updates all external references.
  */
-class EncapsulateFieldRefactoring(private val analysis: AnalysisResult) {
+class EncapsulateFieldRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "encapsulate-field"
+    override val description = "Make a public var private with a backing field and generate getter/setter"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(encapsulate(ctx.file, ctx.line, ctx.col))
 
     fun encapsulate(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

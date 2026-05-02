@@ -9,7 +9,7 @@ import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ExtractSuperclassRefactoring
+import martin.refactoring.extract.ExtractSuperclassRefactoring
 
 class ExtractSuperclassCommand : CliktCommand(name = "extract-superclass") {
 
@@ -24,6 +24,8 @@ class ExtractSuperclassCommand : CliktCommand(name = "extract-superclass") {
         projectDir, "extract-superclass",
         daemonRequest = DaemonRequest(command = "extract-superclass", file = file.toString(), line = line, col = col, name = superclassName, members = members.joinToString(",")),
     ) { analysis ->
-        ExtractSuperclassRefactoring(analysis).extract(file, line, col, superclassName, members)
+        val output = ExtractSuperclassRefactoring(analysis).extract(file, line, col, superclassName, members)
+        output.writeNewFiles()
+        output.edits
     }
 }

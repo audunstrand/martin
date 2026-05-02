@@ -9,7 +9,7 @@ import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.IntroduceParameterObjectRefactoring
+import martin.refactoring.restructure.IntroduceParameterObjectRefactoring
 
 class IntroduceParameterObjectCommand : CliktCommand(name = "introduce-parameter-object") {
 

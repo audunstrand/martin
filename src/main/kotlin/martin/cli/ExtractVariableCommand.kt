@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ExtractVariableRefactoring
+import martin.refactoring.extract.ExtractVariableRefactoring
 
 class ExtractVariableCommand : CliktCommand(name = "extract-variable") {
 

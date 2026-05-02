@@ -8,8 +8,8 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.InlineRefactoring
-import martin.refactoring.InlineRefactoring.SourceLocation
+import martin.refactoring.core.InlineRefactoring
+import martin.refactoring.core.InlineRefactoring.SourceLocation
 
 class InlineCommand : CliktCommand(name = "inline") {
 

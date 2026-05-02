@@ -9,7 +9,7 @@ import com.github.ajalt.clikt.parameters.options.split
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ExtractInterfaceRefactoring
+import martin.refactoring.extract.ExtractInterfaceRefactoring
 
 class ExtractInterfaceCommand : CliktCommand(name = "extract-interface") {
 
@@ -24,6 +24,8 @@ class ExtractInterfaceCommand : CliktCommand(name = "extract-interface") {
         projectDir, "extract-interface",
         daemonRequest = DaemonRequest(command = "extract-interface", file = file.toString(), line = line, col = col, name = interfaceName, methods = methods.joinToString(",")),
     ) { analysis ->
-        ExtractInterfaceRefactoring(analysis).extract(file, line, col, interfaceName, methods)
+        val output = ExtractInterfaceRefactoring(analysis).extract(file, line, col, interfaceName, methods)
+        output.writeNewFiles()
+        output.edits
     }
 }

@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.convert
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -13,7 +14,14 @@ import java.nio.file.Path
  * `val x: T get() = expr` -> `fun x(): T = expr`
  * Updates all usage sites (property access -> function call).
  */
-class ConvertPropertyToFunctionRefactoring(private val analysis: AnalysisResult) {
+class ConvertPropertyToFunctionRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "convert-property-to-function"
+    override val description = "Convert a val property with a getter into a function. Updates all usage sites"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(convert(ctx.file, ctx.line, ctx.col))
 
     fun convert(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.convert
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -10,7 +11,14 @@ import java.nio.file.Path
 /**
  * Convert positional arguments to named arguments at a call site.
  */
-class AddNamedArgumentsRefactoring(private val analysis: AnalysisResult) {
+class AddNamedArgumentsRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "add-named-arguments"
+    override val description = "Convert positional arguments to named arguments at a call site"
+    override val params = emptyList<ParamDef>()
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(convert(ctx.file, ctx.line, ctx.col))
 
     fun convert(file: Path, line: Int, col: Int): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

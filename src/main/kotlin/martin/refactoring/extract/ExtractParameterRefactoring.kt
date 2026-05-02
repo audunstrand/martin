@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.extract
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
@@ -12,7 +13,17 @@ import java.nio.file.Path
  * Extract parameter: takes a hardcoded expression inside a function body and turns it into a parameter.
  * All call sites are updated to pass the original expression as an argument.
  */
-class ExtractParameterRefactoring(private val analysis: AnalysisResult) {
+class ExtractParameterRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "extract-parameter"
+    override val description = "Extract a hardcoded expression into a function parameter. All call sites are updated to pass the original value"
+    override val params = listOf(
+        ParamDef("name", ParamType.STRING, "Name for the new parameter"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput {
+        return RefactoringOutput.edits(extract(ctx.file, ctx.line, ctx.col, ctx.string("name")))
+    }
 
     fun extract(file: Path, line: Int, col: Int, paramName: String): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

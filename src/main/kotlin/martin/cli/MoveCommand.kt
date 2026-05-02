@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.path
 import martin.compiler.GradleProjectDiscovery
 import martin.daemon.DaemonRequest
-import martin.refactoring.MoveRefactoring
+import martin.refactoring.core.MoveRefactoring
 
 class MoveCommand : CliktCommand(name = "move") {
 
@@ -20,7 +20,8 @@ class MoveCommand : CliktCommand(name = "move") {
         projectDir, "move",
         daemonRequest = DaemonRequest(command = "move", symbol = symbol, toPackage = toPackage),
     ) { analysis ->
-        val sourceRoots = GradleProjectDiscovery(projectDir).discoverSourceRoots()
-        MoveRefactoring(analysis).move(symbol, toPackage, sourceRoots)
+        val output = MoveRefactoring(analysis).move(symbol, toPackage, GradleProjectDiscovery(projectDir).discoverSourceRoots())
+        output.writeNewFiles()
+        output.edits
     }
 }

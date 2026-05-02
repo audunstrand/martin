@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
@@ -12,7 +13,14 @@ import java.nio.file.Path
  * Makes the primary constructor private and adds a companion object factory function.
  * Updates all constructor call sites to use the factory.
  */
-class ReplaceConstructorWithFactoryRefactoring(private val analysis: AnalysisResult) {
+class ReplaceConstructorWithFactoryRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "replace-constructor-with-factory"
+    override val description = "Make the primary constructor private and add a companion object factory function"
+    override val params = listOf(ParamDef("factoryName", ParamType.STRING, "Name for the factory function", required = false, default = "create"))
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(replace(ctx.file, ctx.line, ctx.col, ctx.stringOrNull("factoryName") ?: "create"))
 
     fun replace(file: Path, line: Int, col: Int, factoryName: String = "create"): List<TextEdit> {
         val (ktFile, element) = RefactoringUtils.findElementAt(analysis, file, line, col)

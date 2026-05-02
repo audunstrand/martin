@@ -1,5 +1,6 @@
-package martin.refactoring
+package martin.refactoring.restructure
 
+import martin.refactoring.*
 import martin.compiler.AnalysisResult
 import martin.rewriter.TextEdit
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -15,7 +16,17 @@ import java.nio.file.Path
  * Martin verifies the same code exists at other call sites, removes it from all sites,
  * and prepends it to the function body.
  */
-class MoveStatementsIntoFunctionRefactoring(private val analysis: AnalysisResult) {
+class MoveStatementsIntoFunctionRefactoring(private val analysis: AnalysisResult) : Refactoring {
+
+    override val name = "move-statements-into-function"
+    override val description = "Move statements from a call site into the function body"
+    override val params = listOf(
+        ParamDef("statementsStartLine", ParamType.INT, "First line of statements to move"),
+        ParamDef("statementsEndLine", ParamType.INT, "Last line of statements to move"),
+    )
+
+    override fun execute(ctx: RefactoringContext): RefactoringOutput =
+        RefactoringOutput.edits(move(ctx.file, ctx.line, ctx.col, ctx.int("statementsStartLine"), ctx.int("statementsEndLine")))
 
     fun move(
         file: Path,

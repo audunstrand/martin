@@ -8,7 +8,7 @@ import kotlin.io.path.Path
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.path
 import martin.daemon.DaemonRequest
-import martin.refactoring.ConvertToDataClassRefactoring
+import martin.refactoring.convert.ConvertToDataClassRefactoring
 
 class ConvertToDataClassCommand : CliktCommand(name = "convert-to-data-class") {
 
